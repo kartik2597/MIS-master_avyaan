@@ -1,0 +1,7 @@
+Work Date,Employee ID,Employee Name,Project Name,Client Name,Task Type,Billable,Hours Logged
+2026-11-02,EMP001,Test One,Portal Revamp,Acme Corp,Development,Yes,6
+2026-11-02,EMP001,Test One,Portal Revamp,Acme Corp,Stand-up,No,1.5
+2026-11-02,EMP002,Test Two,Data Migration,Globex,Development,Yes,8
+2026-11-03,EMP001,Test One,Portal Revamp,Acme Corp,Testing,Yes,7
+2026-11-03,EMP002,Test Two,Data Migration,Globex,Development,Yes,7.5
+2026-11-03,EMP002,Test Two,Internal Training,Internal,Training,No,1

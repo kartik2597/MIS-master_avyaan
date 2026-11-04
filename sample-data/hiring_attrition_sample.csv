@@ -1,0 +1,7 @@
+Employee ID,Employee Name,Event Type,Event Date,Team,Designation,Manager Name,Exit Reason,Hiring Source
+EMP101,New Joiner One,Joined,2026-10-12,Support,Agent,Meera Shah,,Referral
+EMP102,New Joiner Two,New Hire,2026-10-19,Sales,Agent,Ravi Kumar,,Campus
+EMP103,New Joiner Three,Joined,2026-11-02,Support,Agent,Meera Shah,,Job Portal
+EMP002,Test Two,Resigned,2026-10-28,Support,Agent,Meera Shah,Better offer,
+EMP087,Old Employee,Left,2026-10-30,Sales,Agent,Ravi Kumar,Relocation,
+EMP090,Another Employee,Terminated,2026-11-03,Support,Agent,Meera Shah,,

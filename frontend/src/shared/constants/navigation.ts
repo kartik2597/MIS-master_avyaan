@@ -7,6 +7,8 @@ import {
   UserCog,
   Settings,
   Activity,
+  FolderKanban,
+  UserMinus,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -26,6 +28,8 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["ADMIN", "MIS", "MANAGER", "TL"],
     children: [
       { label: "Agent Dashboard", to: "/dashboard/agent", icon: Activity, roles: ["ADMIN", "MIS", "MANAGER", "TL"] },
+      { label: "Project & Timesheet", to: "/dashboard/projects", icon: FolderKanban, roles: ["ADMIN", "MIS", "MANAGER", "TL"] },
+      { label: "Hiring & Attrition", to: "/dashboard/hiring", icon: UserMinus, roles: ["ADMIN", "MIS", "MANAGER", "TL"] },
     ],
   },
   { label: "Upload Reports", to: "/uploads", icon: Upload, roles: ["ADMIN", "MIS"] },

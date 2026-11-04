@@ -11,6 +11,10 @@ from app.models.upload_history import UploadHistory
 from app.models.user import UserRole
 from app.parsers.apr_parser import parse_apr_upload
 from app.parsers.shift_adherence_parser import parse_shift_adherence_upload
+from app.parsers.project_hr_parsers import (
+    parse_employee_movement_upload,
+    parse_project_timesheet_upload,
+)
 from app.parsers.shrinkage_parser import parse_shrinkage_upload
 from app.parsers.workbook_parsers import (
     parse_daily_activity_upload,
@@ -36,6 +40,8 @@ IMPORTERS: dict[ReportType, Callable[..., dict[str, int]]] = {
     ReportType.EMPLOYEE_ROSTER: parse_employee_roster_upload,
     ReportType.DAILY_ACTIVITY: parse_daily_activity_upload,
     ReportType.SHRINKAGE_HOURS: parse_shrinkage_hours_upload,
+    ReportType.PROJECT_TIMESHEET: parse_project_timesheet_upload,
+    ReportType.HIRING_ATTRITION: parse_employee_movement_upload,
 }
 
 

@@ -220,3 +220,144 @@ export interface ImportSummary {
   /** Which rows were skipped and why. Null when nothing failed. */
   message?: string | null;
 }
+
+// --- Project & timesheet dashboard -------------------------------------------
+
+export interface ProjectSummary {
+  date_from: string | null;
+  date_to: string | null;
+  /** False when no timesheet rows exist for the period. */
+  has_data: boolean;
+  /** Hours. */
+  total_hours: number;
+  billable_hours: number;
+  non_billable_hours: number;
+  /** 0-100, or null when nothing was logged. */
+  billable_percent: number | null;
+  employees_logged: number;
+  active_projects: number;
+  avg_hours_per_employee: number;
+}
+
+export interface ProjectHoursRow {
+  project_name: string;
+  client_name: string;
+  total_hours: number;
+  billable_hours: number;
+  employees: number;
+  share_percent: number;
+}
+
+export interface ProjectHoursList {
+  items: ProjectHoursRow[];
+  date_from: string | null;
+  date_to: string | null;
+}
+
+export interface ProjectEmployeeRow {
+  emp_id: string;
+  employee_name: string;
+  total_hours: number;
+  billable_hours: number;
+  billable_percent: number | null;
+  projects: number;
+  days_logged: number;
+}
+
+export interface ProjectEmployeeList extends Paginated<ProjectEmployeeRow> {
+  date_from: string | null;
+  date_to: string | null;
+}
+
+export interface BenchEmployeeRow {
+  emp_id: string;
+  employee_name: string;
+  process: string;
+  designation: string;
+  manager_name: string;
+  tl_name: string;
+}
+
+/** Active employees who logged no project hours in the period. */
+export interface BenchList extends Paginated<BenchEmployeeRow> {
+  date_from: string | null;
+  date_to: string | null;
+}
+
+export interface ProjectTrendPoint {
+  report_date: string; // YYYY-MM-DD
+  total_hours: number;
+  billable_hours: number;
+}
+
+export interface ProjectTrends {
+  points: ProjectTrendPoint[];
+  date_from: string | null;
+  date_to: string | null;
+}
+
+// --- Hiring & attrition dashboard --------------------------------------------
+
+export interface ExitReasonCount {
+  reason: string;
+  count: number;
+}
+
+export interface HiringSummary {
+  date_from: string | null;
+  date_to: string | null;
+  /** False when no hiring or exit rows exist for the period. */
+  has_data: boolean;
+  joiners: number;
+  leavers: number;
+  net_change: number;
+  opening_headcount: number | null;
+  closing_headcount: number | null;
+  /** 0-100, or null when there is no headcount to compare against. */
+  attrition_percent: number | null;
+  top_exit_reasons: ExitReasonCount[];
+}
+
+export interface HiringTrendPoint {
+  month: string; // YYYY-MM
+  joiners: number;
+  leavers: number;
+}
+
+export interface HiringTrends {
+  points: HiringTrendPoint[];
+  date_from: string | null;
+  date_to: string | null;
+}
+
+export interface HiringTeamRow {
+  team: string;
+  joiners: number;
+  leavers: number;
+  net_change: number;
+}
+
+export interface HiringTeamList {
+  items: HiringTeamRow[];
+  date_from: string | null;
+  date_to: string | null;
+}
+
+export type HiringEventType = "JOINED" | "LEFT";
+
+export interface HiringEventRow {
+  emp_id: string;
+  employee_name: string;
+  event_type: HiringEventType;
+  event_date: string;
+  team: string;
+  designation: string;
+  manager_name: string;
+  /** Exit reason for a leaver, hiring source for a joiner. Empty when not given. */
+  detail: string;
+}
+
+export interface HiringEventList extends Paginated<HiringEventRow> {
+  date_from: string | null;
+  date_to: string | null;
+}

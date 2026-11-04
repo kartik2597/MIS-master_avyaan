@@ -18,6 +18,8 @@ import { Route as AppUploadHistoryRouteImport } from './routes/_app.upload-histo
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppEmployeesRouteImport } from './routes/_app.employees'
 import { Route as AppDashboardSupportRouteImport } from './routes/_app.dashboard.support'
+import { Route as AppDashboardProjectsRouteImport } from './routes/_app.dashboard.projects'
+import { Route as AppDashboardHiringRouteImport } from './routes/_app.dashboard.hiring'
 import { Route as AppDashboardAgentRouteImport } from './routes/_app.dashboard.agent'
 
 const LoginRoute = LoginRouteImport.update({
@@ -64,6 +66,16 @@ const AppDashboardSupportRoute = AppDashboardSupportRouteImport.update({
   path: '/dashboard/support',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDashboardProjectsRoute = AppDashboardProjectsRouteImport.update({
+  id: '/dashboard/projects',
+  path: '/dashboard/projects',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDashboardHiringRoute = AppDashboardHiringRouteImport.update({
+  id: '/dashboard/hiring',
+  path: '/dashboard/hiring',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardAgentRoute = AppDashboardAgentRouteImport.update({
   id: '/dashboard/agent',
   path: '/dashboard/agent',
@@ -79,6 +91,8 @@ export interface FileRoutesByFullPath {
   '/uploads': typeof AppUploadsRoute
   '/users': typeof AppUsersRoute
   '/dashboard/agent': typeof AppDashboardAgentRoute
+  '/dashboard/hiring': typeof AppDashboardHiringRoute
+  '/dashboard/projects': typeof AppDashboardProjectsRoute
   '/dashboard/support': typeof AppDashboardSupportRoute
 }
 export interface FileRoutesByTo {
@@ -90,6 +104,8 @@ export interface FileRoutesByTo {
   '/uploads': typeof AppUploadsRoute
   '/users': typeof AppUsersRoute
   '/dashboard/agent': typeof AppDashboardAgentRoute
+  '/dashboard/hiring': typeof AppDashboardHiringRoute
+  '/dashboard/projects': typeof AppDashboardProjectsRoute
   '/dashboard/support': typeof AppDashboardSupportRoute
 }
 export interface FileRoutesById {
@@ -103,6 +119,8 @@ export interface FileRoutesById {
   '/_app/uploads': typeof AppUploadsRoute
   '/_app/users': typeof AppUsersRoute
   '/_app/dashboard/agent': typeof AppDashboardAgentRoute
+  '/_app/dashboard/hiring': typeof AppDashboardHiringRoute
+  '/_app/dashboard/projects': typeof AppDashboardProjectsRoute
   '/_app/dashboard/support': typeof AppDashboardSupportRoute
 }
 export interface FileRouteTypes {
@@ -116,6 +134,8 @@ export interface FileRouteTypes {
     | '/uploads'
     | '/users'
     | '/dashboard/agent'
+    | '/dashboard/hiring'
+    | '/dashboard/projects'
     | '/dashboard/support'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -127,6 +147,8 @@ export interface FileRouteTypes {
     | '/uploads'
     | '/users'
     | '/dashboard/agent'
+    | '/dashboard/hiring'
+    | '/dashboard/projects'
     | '/dashboard/support'
   id:
     | '__root__'
@@ -139,6 +161,8 @@ export interface FileRouteTypes {
     | '/_app/uploads'
     | '/_app/users'
     | '/_app/dashboard/agent'
+    | '/_app/dashboard/hiring'
+    | '/_app/dashboard/projects'
     | '/_app/dashboard/support'
   fileRoutesById: FileRoutesById
 }
@@ -213,6 +237,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardSupportRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/dashboard/projects': {
+      id: '/_app/dashboard/projects'
+      path: '/dashboard/projects'
+      fullPath: '/dashboard/projects'
+      preLoaderRoute: typeof AppDashboardProjectsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/dashboard/hiring': {
+      id: '/_app/dashboard/hiring'
+      path: '/dashboard/hiring'
+      fullPath: '/dashboard/hiring'
+      preLoaderRoute: typeof AppDashboardHiringRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/dashboard/agent': {
       id: '/_app/dashboard/agent'
       path: '/dashboard/agent'
@@ -230,6 +268,8 @@ interface AppRouteChildren {
   AppUploadsRoute: typeof AppUploadsRoute
   AppUsersRoute: typeof AppUsersRoute
   AppDashboardAgentRoute: typeof AppDashboardAgentRoute
+  AppDashboardHiringRoute: typeof AppDashboardHiringRoute
+  AppDashboardProjectsRoute: typeof AppDashboardProjectsRoute
   AppDashboardSupportRoute: typeof AppDashboardSupportRoute
 }
 
@@ -240,6 +280,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppUploadsRoute: AppUploadsRoute,
   AppUsersRoute: AppUsersRoute,
   AppDashboardAgentRoute: AppDashboardAgentRoute,
+  AppDashboardHiringRoute: AppDashboardHiringRoute,
+  AppDashboardProjectsRoute: AppDashboardProjectsRoute,
   AppDashboardSupportRoute: AppDashboardSupportRoute,
 }
 

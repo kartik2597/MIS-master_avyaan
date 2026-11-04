@@ -23,7 +23,7 @@ export interface DashboardAgentParams extends DashboardKpiParams {
   page_size?: number;
 }
 
-function query(params: object) {
+export function query(params: object) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== "") search.set(key, String(value));

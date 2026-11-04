@@ -270,6 +270,60 @@ REPORT_REGISTRY: dict[ReportType, ReportDefinition] = {
         },
         description="Planned and unplanned shrinkage hours per agent per day.",
     ),
+    ReportType.PROJECT_TIMESHEET: ReportDefinition(
+        report_type=ReportType.PROJECT_TIMESHEET,
+        required_columns=[
+            "Work Date",
+            "Employee ID",
+            "Employee Name",
+            "Project Name",
+            "Hours Logged",
+        ],
+        optional_columns=[
+            "Client Name",
+            "Task Type",
+            "Billable",
+        ],
+        # Aliases stay specific on purpose: a generic name such as "Hours" or "Type"
+        # would make unrelated sheets (notes, metric guides) look like a timesheet.
+        column_aliases={
+            "Work Date": ["Timesheet Date", "Log Date"],
+            "Employee ID": ["Employee Code", "Emp Code", "Emp ID"],
+            "Employee Name": ["Emp Name"],
+            "Project Name": ["Project", "Project Code"],
+            "Hours Logged": ["Hours Worked", "Logged Hours", "Timesheet Hours"],
+            "Client Name": ["Client"],
+            "Task Type": ["Task", "Activity"],
+            "Billable": ["Is Billable", "Billable Flag"],
+        },
+        description="Project timesheet: hours logged per employee, project and day.",
+    ),
+    ReportType.HIRING_ATTRITION: ReportDefinition(
+        report_type=ReportType.HIRING_ATTRITION,
+        required_columns=[
+            "Employee ID",
+            "Employee Name",
+            "Event Type",
+            "Event Date",
+        ],
+        optional_columns=[
+            "Team",
+            "Designation",
+            "Manager Name",
+            "Exit Reason",
+            "Hiring Source",
+        ],
+        column_aliases={
+            "Employee ID": ["Employee Code", "Emp Code", "Emp ID"],
+            "Employee Name": ["Emp Name"],
+            "Event Type": ["Movement Type", "Movement"],
+            "Event Date": ["Movement Date", "Effective Date"],
+            "Manager Name": ["Manager"],
+            "Exit Reason": ["Reason For Leaving", "Separation Reason"],
+            "Hiring Source": ["Source Of Hire"],
+        },
+        description="Joiners and leavers: one row per hiring or exit event.",
+    ),
 }
 
 

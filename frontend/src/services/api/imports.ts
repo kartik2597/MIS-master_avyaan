@@ -9,10 +9,19 @@ export const IMPORTABLE_REPORT_TYPES = [
   "EMPLOYEE_ROSTER",
   "DAILY_ACTIVITY",
   "SHRINKAGE_HOURS",
+  "PROJECT_TIMESHEET",
+  "HIRING_ATTRITION",
 ];
 
 /** Order to process several reports from one workbook: people first, then activity, then shrinkage. */
-export const IMPORT_ORDER = ["MASTER_DATABASE", "EMPLOYEE_ROSTER", "DAILY_ACTIVITY", "SHRINKAGE_HOURS"];
+export const IMPORT_ORDER = [
+  "MASTER_DATABASE",
+  "EMPLOYEE_ROSTER",
+  "DAILY_ACTIVITY",
+  "SHRINKAGE_HOURS",
+  "PROJECT_TIMESHEET",
+  "HIRING_ATTRITION",
+];
 
 export function importReport(reportType: string, uploadId: string) {
   return apiRequest<ImportSummary>(`/imports/${reportType}/${uploadId}`, {

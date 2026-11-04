@@ -16,3 +16,7 @@ class ReportType(str, Enum):
     EMPLOYEE_ROSTER = "EMPLOYEE_ROSTER"
     DAILY_ACTIVITY = "DAILY_ACTIVITY"
     SHRINKAGE_HOURS = "SHRINKAGE_HOURS"
+    # Project hours logged per employee per day.
+    PROJECT_TIMESHEET = "PROJECT_TIMESHEET"
+    # Joiners and leavers: one row per hiring or exit event.
+    HIRING_ATTRITION = "HIRING_ATTRITION"

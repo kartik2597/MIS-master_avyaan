@@ -15,8 +15,10 @@ MIS Master is a workforce reporting and analytics application for call-center op
 ## Features
 
 - Upload Excel and CSV workforce reports with validation and row-level error reporting
-- Detect and process APR, shift adherence, shrinkage, and master database reports
+- Detect and process APR, shift adherence, shrinkage, master database, project timesheet, and hiring/attrition reports
 - Monitor agent KPIs, attendance, call activity, adherence, and shrinkage
+- Track project hours, billable share, and the bench list on the Project & Timesheet dashboard
+- Track joiners, leavers, attrition rate, and exit reasons on the Hiring & Attrition dashboard
 - Manage employees and user accounts
 - Review upload history and import status
 - Generate daily, weekly, and monthly MIS workbooks
@@ -31,6 +33,39 @@ MIS Master is a workforce reporting and analytics application for call-center op
 | `SHIFT_ADHERENCE` | Shift attendance and adherence records |
 | `SHRINKAGE` | Agent shrinkage records |
 | `MASTER_DATABASE` | Employee master and manager/TL team relationships |
+| `PROJECT_TIMESHEET` | Hours per employee, project, and day (Project & Timesheet dashboard) |
+| `HIRING_ATTRITION` | One row per joiner or leaver (Hiring & Attrition dashboard) |
+
+### Project timesheet columns
+
+| Column | Required | Notes |
+| --- | --- | --- |
+| `Work Date` | Yes | Also accepts `Timesheet Date`, `Log Date` |
+| `Employee ID` | Yes | Also accepts `Emp ID`, `Emp Code`, `Employee Code` |
+| `Employee Name` | Yes | Also accepts `Emp Name` |
+| `Project Name` | Yes | Also accepts `Project`, `Project Code` |
+| `Hours Logged` | Yes | Decimal (`6.5`) or `HH:MM`. Must be above 0 and at most 24 per row |
+| `Client Name` | No | Shown next to the project |
+| `Task Type` | No | Defaults to `General` |
+| `Billable` | No | `Yes`/`No`. Defaults to `Yes` |
+
+One row is one person's hours on one project and task for one day. Re-uploading the same employee, day, project, and task updates the row instead of adding a duplicate.
+
+### Hiring and attrition columns
+
+| Column | Required | Notes |
+| --- | --- | --- |
+| `Employee ID` | Yes | |
+| `Employee Name` | Yes | |
+| `Event Type` | Yes | `Joined` / `New Hire`, or `Left` / `Resigned` / `Terminated` |
+| `Event Date` | Yes | Joining date, or last working day |
+| `Team`, `Designation`, `Manager Name` | No | Taken from Employee Master when left blank |
+| `Exit Reason` | No | For leavers. `Resigned` or `Terminated` in `Event Type` is used when blank |
+| `Hiring Source` | No | For joiners, for example `Referral` or `Campus` |
+
+Attrition % is leavers divided by the average of opening and closing headcount. Opening headcount is the number of Employee Master records that joined before the period and had not left. Import the master database first so this number is correct.
+
+MANAGER and TL users see joiners and leavers only for employees found in Employee Master under their own name. A joiner who is not in the master yet is visible to ADMIN and MIS only.
 
 Report column definitions live in `backend/app/reports/registry.py`. Parser implementations live in `backend/app/parsers/` and must stay aligned with that registry.
 
