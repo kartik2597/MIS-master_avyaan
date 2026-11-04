@@ -37,6 +37,7 @@ from app.parsers.workbook_parsers import (
 )
 from app.reports.headers import normalize_column_name
 from app.reports.report_types import ReportType
+from app.services.employee_sync import sync_employees_from_report_rows
 
 
 logger = logging.getLogger(__name__)
@@ -157,6 +158,13 @@ def process_project_timesheets(
         for row in rows
     }
     upsert_project_timesheets(db, list(latest_by_key.values()))
+    # Anyone who logged hours but is not in Employee Master yet is added to it, so
+    # they can be found by team and appear on the right manager's dashboard.
+    created = sync_employees_from_report_rows(
+        db, list(latest_by_key.values()), upload_id
+    )
+    if created:
+        logger.info("Timesheet upload %s added %s new employee(s)", upload_id, created)
 
     duplicates = len(rows) - len(latest_by_key)
     if duplicates:
@@ -268,6 +276,29 @@ def upsert_employee_movements(db: Session, rows: list[dict[str, Any]]) -> None:
     db.commit()
 
 
+def movement_sync_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Hiring / exit rows in the shape the employee sync understands.
+
+    A joiner's joining date is the event date. A leaver who is not in the master
+    is added as Resigned, so they never show up as active or on the bench. Rows
+    go in date order, so when someone both joined and left, the later event wins.
+    """
+    return [
+        {
+            "emp_id": row["emp_id"],
+            "employee_name": row["employee_name"],
+            "process": row["team"],
+            "designation": row["designation"],
+            "manager_name": row["manager_name"],
+            "report_date": row["report_date"],
+            "date_of_joining": row["report_date"] if row["event_type"] == EVENT_JOINED else None,
+            "status": "Active" if row["event_type"] == EVENT_JOINED else "Resigned",
+            "upload_id": row["upload_id"],
+        }
+        for row in sorted(rows, key=lambda item: item["report_date"])
+    ]
+
+
 def process_employee_movements(
     db: Session, upload_id: UUID, raw_records: list[RawReportRecord]
 ) -> list[RowError]:
@@ -297,6 +328,10 @@ def process_employee_movements(
     final_rows = list(latest_by_key.values())
     fill_movements_from_master(db, final_rows)
     upsert_employee_movements(db, final_rows)
+    # Joiners (and leavers) missing from Employee Master are added to it.
+    created = sync_employees_from_report_rows(db, movement_sync_rows(final_rows), upload_id)
+    if created:
+        logger.info("Hiring upload %s added %s new employee(s)", upload_id, created)
 
     duplicates = len(rows) - len(latest_by_key)
     if duplicates:

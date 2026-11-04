@@ -471,12 +471,114 @@ def test_hiring_dashboard_is_limited_to_a_managers_team(client, auth_headers, ma
     mine = client.get("/dashboard/hiring/summary", headers=manager).json()
     events = client.get("/dashboard/hiring/events", headers=manager).json()
 
-    # Only A1 left from Meera's team. Joiners not yet in the master, and
-    # leavers from other managers' teams, are not shown to her.
-    assert (mine["joiners"], mine["leavers"]) == (0, 1)
-    assert [row["emp_id"] for row in events["items"]] == ["A1"]
+    # Meera sees her own leaver (A1) and the joiner assigned to her (N1). The joiner
+    # was added to Employee Master by the upload. Other teams' people stay hidden.
+    assert (mine["joiners"], mine["leavers"]) == (1, 1)
+    assert [row["emp_id"] for row in events["items"]] == ["A1", "N1"]  # newest first
 
 
 def test_hiring_dashboards_require_login(client):
     for path in ("summary", "trends", "teams", "events"):
         assert client.get(f"/dashboard/hiring/{path}").status_code == 401
+
+
+# --- Unknown people are added to Employee Master -----------------------------
+
+
+def test_timesheet_adds_unknown_employees_to_the_master(client, auth_headers, engine, master):
+    rows = TIMESHEET + [dict(TIMESHEET[0], Employee_ID="Z9", Employee_Name="Zed New")]
+
+    upload_and_import(client, auth_headers(), "PROJECT_TIMESHEET", "Timesheet", rows)
+
+    with Session(engine) as session:
+        new = session.query(Employee).filter_by(emp_id="Z9").one()
+        assert new.employee_name == "Zed New" and new.employment_status == "Active"
+        assert new.date_of_joining == date(2026, 10, 1)  # first day seen
+        # People already in the master are not changed.
+        assert session.query(Employee).filter_by(emp_id="A1").one().manager_name == "Meera Shah"
+        assert session.query(Employee).count() == 7
+
+
+def test_hiring_adds_unknown_joiners_and_leavers_to_the_master(client, auth_headers, engine, master):
+    rows = MOVEMENTS + [dict(MOVEMENTS[3], Employee_ID="X7", Employee_Name="Gone Person")]
+
+    upload_and_import(client, auth_headers(), "HIRING_ATTRITION", "Hiring", rows)
+
+    with Session(engine) as session:
+        joiner = session.query(Employee).filter_by(emp_id="N1").one()
+        assert joiner.employment_status == "Active"
+        assert joiner.date_of_joining == date(2026, 10, 5)  # the joining date in the file
+        assert (joiner.process, joiner.designation) == ("Support", "Agent")
+        assert joiner.manager_name == "Meera Shah"
+        # A leaver nobody knew about is added as Resigned, so never "on the bench".
+        leaver = session.query(Employee).filter_by(emp_id="X7").one()
+        assert leaver.employment_status == "Resigned" and leaver.process == "Sales"
+        # People already in the master keep their status.
+        assert session.query(Employee).filter_by(emp_id="A1").one().employment_status == "Active"
+
+
+def test_new_joiner_is_visible_to_their_manager_straight_away(client, auth_headers, make_user, master):
+    upload_and_import(client, auth_headers(), "HIRING_ATTRITION", "Hiring", MOVEMENTS)
+    manager = manager_headers(client, make_user)
+
+    options = client.get("/dashboard/filters", headers=manager).json()
+
+    assert "Meera Shah" in options["managers"]
+    found = client.get(
+        "/dashboard/hiring/events", headers=manager, params={"search": "New One"}
+    ).json()
+    assert [row["emp_id"] for row in found["items"]] == ["N1"]
+
+
+# --- NA / N/A is real text, not a blank cell ---------------------------------
+
+
+def test_na_is_kept_as_text_in_the_master_import(client, auth_headers, engine):
+    row = {
+        "Employee ID": "T9", "Employee Name": "Top Level", "Email": "t9@example.com",
+        "Mobile": "9876543210", "Department": "Ops", "Process": "Support",
+        "Designation": "Manager", "Manager Name": "Anil Mehta", "TL Name": "NA",
+        "Date Of Joining": "2025-01-01", "Employment Status": "Active", "Location": "Indore",
+    }
+
+    summary = upload_and_import(client, auth_headers(), "MASTER_DATABASE", "Master_Database", [row])
+
+    assert (summary["processed_records"], summary["failed_records"]) == (1, 0)
+    with Session(engine) as session:
+        assert session.query(Employee).filter_by(emp_id="T9").one().tl_name == "NA"
+
+
+def test_a_truly_empty_cell_is_still_blank_in_the_master_import(client, auth_headers):
+    row = {
+        "Employee ID": "T8", "Employee Name": "No Lead", "Email": "t8@example.com",
+        "Mobile": "9876543210", "Department": "Ops", "Process": "Support",
+        "Designation": "Agent", "Manager Name": "Anil Mehta", "TL Name": None,
+        "Date Of Joining": "2025-01-01", "Employment Status": "Active", "Location": "Indore",
+    }
+
+    summary = upload_and_import(client, auth_headers(), "MASTER_DATABASE", "Master_Database", [row])
+
+    assert summary["failed_records"] == 1
+    assert "tl_name" in summary["message"]
+
+
+def test_na_in_a_number_column_still_counts_as_blank(client, auth_headers):
+    row = {
+        "Work_Date": "2026-10-01", "Employee_ID": "A1", "Employee_Name": "Agent One",
+        "Team": "Support", "Attendance_Status": "Absent", "Login_Hours": "NA",
+        "Staff_Time_Hours": "N/A", "Talk_Time_Hours": 0, "Idle_Time_Hours": "null",
+        "Break_Time_Hours": "None",
+    }
+
+    summary = upload_and_import(client, auth_headers(), "DAILY_ACTIVITY", "Daily_Activity", [row])
+
+    assert (summary["processed_records"], summary["failed_records"]) == (1, 0)
+
+
+def test_na_text_is_kept_in_text_columns_of_the_timesheet(client, auth_headers, engine, master):
+    rows = [dict(TIMESHEET[0], Client_Name="N/A")]
+
+    upload_and_import(client, auth_headers(), "PROJECT_TIMESHEET", "Timesheet", rows)
+
+    with Session(engine) as session:
+        assert session.query(ProjectTimesheet).one().client_name == "N/A"

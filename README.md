@@ -35,6 +35,11 @@ MIS Master is a workforce reporting and analytics application for call-center op
 | `MASTER_DATABASE` | Employee master and manager/TL team relationships |
 | `PROJECT_TIMESHEET` | Hours per employee, project, and day (Project & Timesheet dashboard) |
 | `HIRING_ATTRITION` | One row per joiner or leaver (Hiring & Attrition dashboard) |
+| `EMPLOYEE_ROSTER` | Compact workbook format: employee roster (one sheet per report) |
+| `DAILY_ACTIVITY` | Compact workbook format: daily attendance, login, talk, idle, and break hours; fills the APR / daily-performance and shift adherence data |
+| `SHRINKAGE_HOURS` | Compact workbook format: planned and unplanned shrinkage hours per employee per day |
+
+A multi-sheet workbook is split by sheet: each recognised sheet becomes its own upload record, and unrecognised sheets (for example a metric guide) are ignored.
 
 ### Project timesheet columns
 
@@ -65,7 +70,13 @@ One row is one person's hours on one project and task for one day. Re-uploading 
 
 Attrition % is leavers divided by the average of opening and closing headcount. Opening headcount is the number of Employee Master records that joined before the period and had not left. Import the master database first so this number is correct.
 
-MANAGER and TL users see joiners and leavers only for employees found in Employee Master under their own name. A joiner who is not in the master yet is visible to ADMIN and MIS only.
+People who appear in a timesheet or hiring/attrition upload but are not in Employee Master yet are added to it automatically (new rows only; existing employees are never overwritten, only blank fields are filled). A joiner is added as `Active` with the event date as the joining date, and a leaver as `Resigned`. Upload a master database file later to fill in their email, mobile, TL, and location. Because they are now in the master, a MANAGER or TL sees the joiners and leavers assigned to their team.
+
+MANAGER and TL users see joiners and leavers only for employees whose manager or TL in Employee Master is their own name.
+
+### Blank cells and `NA`
+
+Only a truly empty cell counts as blank. The text `NA`, `N/A`, `None`, or `null` is kept as real text in text columns, for example a TL Name of `NA` for a manager with no TL. In number, time, date, and Yes/No columns the same text is treated as blank, as before.
 
 Report column definitions live in `backend/app/reports/registry.py`. Parser implementations live in `backend/app/parsers/` and must stay aligned with that registry.
 
@@ -216,14 +227,20 @@ Outside local/development environments, the backend rejects the placeholder secr
 
 Dashboard periods use `YYYY-MM-DD` values through the `date_from` and `date_to` query parameters. Without dates, the dashboard uses the latest reporting day that contains data.
 
+### Request IDs and security headers
+
+Every API response includes `X-Request-ID`, `X-Process-Time-Ms`, and these security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store`. A client-sent `X-Request-ID` is echoed back when it uses only letters, digits, `-` and `_` (up to 64 characters); otherwise a new 12-character ID is generated. The middleware lives in `backend/app/main.py`.
+
 ## Tests and Validation
 
-Run backend tests:
+Run backend tests (always from the `backend` folder, where `pytest.ini` lives):
 
 ```powershell
 cd backend
 python -m pytest
 ```
+
+If the project folder was copied or renamed, delete the old `__pycache__` and `.pytest_cache` folders first so stale compiled files are not reused.
 
 Run frontend lint and production build:
 

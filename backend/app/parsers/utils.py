@@ -24,6 +24,19 @@ def is_blank(value: Any) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 
 
+# A cell that says NA / N/A is real text in a text column (a TL called "NA", a
+# client called "N/A"). In a number, time, date or yes/no column it can only mean
+# "no value", so those parsers treat it as blank. See null_if_na().
+NA_TEXT = {"na", "n/a", "nan", "null", "none"}
+
+
+def null_if_na(value: Any) -> Any:
+    """NA-like text -> None, anything else unchanged. For non-text columns only."""
+    if isinstance(value, str) and value.strip().lower() in NA_TEXT:
+        return None
+    return value
+
+
 def normalize_column(column_name: str) -> str:
     return " ".join(str(column_name).strip().lower().replace("_", " ").split())
 
@@ -48,7 +61,7 @@ def require_raw_value(raw_data: dict[str, Any], column_name: str) -> Any:
 
 
 def time_to_seconds(value: Any) -> int:
-    value = clean_value(value)
+    value = null_if_na(clean_value(value))
     if is_blank(value):
         raise ValueError("Time value is required")
     if isinstance(value, timedelta):
@@ -85,16 +98,16 @@ def time_to_seconds(value: Any) -> int:
 
 
 def duration_to_minutes(value: Any) -> int:
-    value = clean_value(value)
+    value = null_if_na(clean_value(value))
     if is_blank(value):
         return 0
-    if isinstance(value, str) and ":" in value:
+    if isinstance(value, str) and (":" in value or value.strip().upper().startswith("P")):
         return time_to_seconds(value) // 60
     return parse_int(value)
 
 
 def parse_time(value: Any) -> time:
-    value = clean_value(value)
+    value = null_if_na(clean_value(value))
     if isinstance(value, datetime):
         return value.time()
     if isinstance(value, time):
@@ -132,7 +145,7 @@ def parse_bool(
     true_values: set[str] | None = None,
     false_values: set[str] | None = None,
 ) -> bool:
-    value = clean_value(value)
+    value = null_if_na(clean_value(value))
     if is_blank(value):
         return default
     if isinstance(value, bool):
@@ -159,7 +172,7 @@ def parse_bool(
 
 
 def parse_int(value: Any, *, default: int = 0) -> int:
-    value = clean_value(value)
+    value = null_if_na(clean_value(value))
     if is_blank(value):
         return default
     if isinstance(value, bool):
@@ -172,7 +185,7 @@ def parse_int(value: Any, *, default: int = 0) -> int:
 
 
 def parse_decimal(value: Any, *, default: Decimal = Decimal("0")) -> Decimal:
-    value = clean_value(value)
+    value = null_if_na(clean_value(value))
     if is_blank(value):
         return default
 
@@ -194,7 +207,7 @@ def parse_percent(value: Any, *, default: Decimal = Decimal("0")) -> Decimal:
     Limitation: a genuine plain-number value of 1 or less (such as 0.5 meaning
     0.5%) cannot be told apart from an Excel fraction and will be scaled up.
     """
-    value = clean_value(value)
+    value = null_if_na(clean_value(value))
     if is_blank(value):
         return default
 
@@ -206,7 +219,7 @@ def parse_percent(value: Any, *, default: Decimal = Decimal("0")) -> Decimal:
 
 
 def parse_date(value: Any) -> date:
-    value = clean_value(value)
+    value = null_if_na(clean_value(value))
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):

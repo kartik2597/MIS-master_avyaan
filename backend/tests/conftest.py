@@ -99,8 +99,11 @@ def make_user(engine):
 
 
 @pytest.fixture()
-def auth_headers(client, make_user):
-    """Create a user with the given role, log in, and return the auth header."""
+def auth_headers(client, make_user, engine):
+    """Create a user with the given role, log in, and return the auth header.
+
+    Safe to call several times in one test: the user is created only once.
+    """
 
     def factory(
         role: UserRole = UserRole.ADMIN,
@@ -109,7 +112,10 @@ def auth_headers(client, make_user):
         password: str = DEFAULT_PASSWORD,
     ) -> dict[str, str]:
         email = email or f"{role.value.lower()}@mismaster.com"
-        make_user(role=role, email=email, password=password)
+        with Session(engine) as session:
+            exists = session.query(User).filter_by(email=email).first() is not None
+        if not exists:
+            make_user(role=role, email=email, password=password)
         response = client.post(
             "/auth/login", json={"email": email, "password": password}
         )

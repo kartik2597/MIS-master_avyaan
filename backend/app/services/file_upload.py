@@ -181,6 +181,12 @@ def read_uploaded_headers(file_path: Path) -> list[str]:
     return sheets[0][1] if sheets else []
 
 
+# pandas turns "NA", "N/A", "None" and "null" into empty cells by default, which
+# lost real values (a TL named "NA"). Only a truly empty cell is blank; the number,
+# time and date parsers still treat NA-like text as blank (parsers.utils.null_if_na).
+READ_OPTIONS = {"keep_default_na": False, "na_values": [""]}
+
+
 def read_uploaded_rows(
     file_path: Path,
     sheet_name: str | None = None,
@@ -191,11 +197,11 @@ def read_uploaded_rows(
     sheet = sheet_name if sheet_name is not None else 0
     try:
         if extension == ".csv":
-            dataframe = pd.read_csv(file_path)
+            dataframe = pd.read_csv(file_path, **READ_OPTIONS)
         elif extension == ".xlsx":
-            dataframe = pd.read_excel(file_path, sheet_name=sheet, engine="openpyxl")
+            dataframe = pd.read_excel(file_path, sheet_name=sheet, engine="openpyxl", **READ_OPTIONS)
         elif extension == ".xls":
-            dataframe = pd.read_excel(file_path, sheet_name=sheet, engine="xlrd")
+            dataframe = pd.read_excel(file_path, sheet_name=sheet, engine="xlrd", **READ_OPTIONS)
         else:
             raise ValueError("Unsupported file extension")
     except Exception as exc:

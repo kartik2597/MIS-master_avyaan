@@ -17,7 +17,7 @@ from app.parsers.upload_status import (
     mark_upload_processing,
 )
 from app.reports.report_types import ReportType
-from app.services.file_upload import build_upload_directory, is_importable
+from app.services.file_upload import READ_OPTIONS, build_upload_directory, is_importable
 
 
 logger = logging.getLogger(__name__)
@@ -143,11 +143,11 @@ def read_uploaded_dataframe(file_path: Path, sheet_name: str | None = None):
     sheet = sheet_name if sheet_name is not None else 0
     try:
         if extension == ".csv":
-            return pd.read_csv(file_path)
+            return pd.read_csv(file_path, **READ_OPTIONS)
         if extension == ".xlsx":
-            return pd.read_excel(file_path, sheet_name=sheet, engine="openpyxl")
+            return pd.read_excel(file_path, sheet_name=sheet, engine="openpyxl", **READ_OPTIONS)
         if extension == ".xls":
-            return pd.read_excel(file_path, sheet_name=sheet, engine="xlrd")
+            return pd.read_excel(file_path, sheet_name=sheet, engine="xlrd", **READ_OPTIONS)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -172,7 +172,7 @@ def test_all_three_reports_import_into_the_dashboard_tables(client, auth_headers
         assert shrinkage["EMP001"].present_count == 1 and shrinkage["EMP002"].present_count == 0
 
     kpis = client.get("/dashboard/kpis", headers=headers).json()
-    assert kpis["missing_reports"] == ["APR"]  # the test workbook has no APR sheet
+    assert kpis["missing_reports"] == []  # DAILY_ACTIVITY fills the APR / daily-performance table
     assert kpis["head_count"] == 2 and kpis["present_count"] == 1
 
 
