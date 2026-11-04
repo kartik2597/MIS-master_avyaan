@@ -2,8 +2,8 @@ from collections.abc import Iterable
 
 from pydantic import BaseModel, Field
 
-from app.reports.registry import REPORT_REGISTRY
-from app.reports.validators.columns import normalize_column_name
+from app.reports.headers import map_uploaded_columns, normalize_column_name
+from app.reports.registry import REPORT_REGISTRY, get_header_lookup
 
 
 class DetectionResult(BaseModel):
@@ -14,21 +14,22 @@ class DetectionResult(BaseModel):
 
 
 def detect_report_type(uploaded_columns: list[str]) -> DetectionResult:
-    normalized_uploaded_columns = normalize_columns(uploaded_columns)
     best_result: DetectionResult | None = None
 
-    for report_definition in REPORT_REGISTRY.values():
+    for report_type, report_definition in REPORT_REGISTRY.items():
         required_columns = report_definition.required_columns
         total_required_columns = len(required_columns)
+        # Match by canonical name so aliases and spelling variants all count.
+        matched_canonical = set(
+            map_uploaded_columns(
+                uploaded_columns, get_header_lookup(report_type)
+            ).values()
+        )
         matched_columns = [
-            column
-            for column in required_columns
-            if normalize_column_name(column) in normalized_uploaded_columns
+            column for column in required_columns if column in matched_canonical
         ]
         missing_columns = [
-            column
-            for column in required_columns
-            if normalize_column_name(column) not in normalized_uploaded_columns
+            column for column in required_columns if column not in matched_canonical
         ]
 
         confidence_score = calculate_confidence_score(
@@ -79,4 +80,3 @@ def is_better_detection(
     if candidate.confidence_score != current_best.confidence_score:
         return candidate.confidence_score > current_best.confidence_score
     return len(candidate.matched_columns) > len(current_best.matched_columns)
-

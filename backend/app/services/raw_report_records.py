@@ -31,9 +31,8 @@ def save_raw_report_rows(
     db.add_all(raw_records)
     db.commit()
 
-    for raw_record in raw_records:
-        db.refresh(raw_record)
-
+    # No per-record refresh: that issued one SELECT per row. Attributes reload
+    # lazily if a caller ever needs them.
     return raw_records
 
 

@@ -7,7 +7,6 @@ import {
   UserCog,
   Settings,
   Activity,
-  Headphones,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -24,17 +23,16 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Dashboard",
     to: "/dashboard/agent",
     icon: LayoutDashboard,
-    roles: ["ADMIN", "MIS", "MANAGER"],
+    roles: ["ADMIN", "MIS", "MANAGER", "TL"],
     children: [
-      { label: "Agent Dashboard", to: "/dashboard/agent", icon: Activity, roles: ["ADMIN", "MIS", "MANAGER"] },
-      { label: "Support Dashboard", to: "/dashboard/support", icon: Headphones, roles: ["ADMIN", "MIS", "MANAGER"] },
+      { label: "Agent Dashboard", to: "/dashboard/agent", icon: Activity, roles: ["ADMIN", "MIS", "MANAGER", "TL"] },
     ],
   },
   { label: "Upload Reports", to: "/uploads", icon: Upload, roles: ["ADMIN", "MIS"] },
-  { label: "Upload History", to: "/upload-history", icon: History, roles: ["ADMIN", "MIS", "MANAGER"] },
+  { label: "Upload History", to: "/upload-history", icon: History, roles: ["ADMIN", "MIS", "MANAGER", "TL"] },
   { label: "Employee Master", to: "/employees", icon: Users, roles: ["ADMIN", "MIS"] },
   { label: "User Management", to: "/users", icon: UserCog, roles: ["ADMIN"] },
-  { label: "Settings", to: "/settings", icon: Settings, roles: ["ADMIN", "MIS", "MANAGER"] },
+  { label: "Settings", to: "/settings", icon: Settings, roles: ["ADMIN", "MIS", "MANAGER", "TL"] },
 ];
 
 export function filterNavByRole(items: NavItem[], role: Role): NavItem[] {

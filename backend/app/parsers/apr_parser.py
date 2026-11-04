@@ -1,4 +1,5 @@
-from datetime import datetime
+import logging
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID
 
@@ -9,20 +10,26 @@ from sqlalchemy.orm import Session
 from app.models.agent_daily_performance import AgentDailyPerformance
 from app.models.raw_report_record import RawReportRecord
 from app.models.upload_history import UploadHistory
+from app.parsers.row_checks import check_report_row, load_known_emp_ids
+from app.parsers.upload_status import (
+    RowError,
+    mark_upload_completed,
+    mark_upload_failed,
+    mark_upload_processing,
+)
 from app.parsers.utils import (
     get_raw_value,
     parse_date,
-    parse_decimal,
     parse_int,
+    parse_percent,
     require_raw_value,
     time_to_seconds,
 )
 from app.reports.report_types import ReportType
+from app.services.employee_sync import sync_employees_from_report_rows
 
 
-UPLOAD_STATUS_PROCESSING = "PROCESSING"
-UPLOAD_STATUS_COMPLETED = "COMPLETED"
-UPLOAD_STATUS_FAILED = "FAILED"
+logger = logging.getLogger(__name__)
 
 
 def parse_apr_upload(db: Session, upload_id: UUID) -> dict[str, int]:
@@ -35,7 +42,12 @@ def parse_apr_upload(db: Session, upload_id: UUID) -> dict[str, int]:
     try:
         raw_records = get_apr_raw_records(db=db, upload_id=upload_id)
         total_records = len(raw_records)
-        performance_rows, failed_records = map_apr_rows(raw_records)
+        performance_rows, row_errors = map_apr_rows(
+            raw_records, known_emp_ids=load_known_emp_ids(db)
+        )
+        for row in performance_rows:
+            row["upload_id"] = upload_id
+        failed_records = len(row_errors)
         processed_records = total_records - failed_records
 
         upsert_agent_daily_performance(db=db, performance_rows=performance_rows)
@@ -45,6 +57,7 @@ def parse_apr_upload(db: Session, upload_id: UUID) -> dict[str, int]:
             total_records=total_records,
             processed_records=processed_records,
             failed_records=failed_records,
+            row_errors=row_errors,
         )
 
         return {
@@ -99,17 +112,21 @@ def get_apr_raw_records(db: Session, upload_id: UUID) -> list[RawReportRecord]:
 
 def map_apr_rows(
     raw_records: list[RawReportRecord],
-) -> tuple[list[dict[str, Any]], int]:
+    known_emp_ids: set[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[RowError]]:
     performance_rows: list[dict[str, Any]] = []
-    failed_records = 0
+    row_errors: list[RowError] = []
 
     for raw_record in raw_records:
         try:
-            performance_rows.append(map_apr_row(raw_record.raw_data))
-        except (TypeError, ValueError):
-            failed_records += 1
+            row = map_apr_row(raw_record.raw_data)
+            check_report_row(row, known_emp_ids=known_emp_ids)
+            performance_rows.append(row)
+        except (TypeError, ValueError) as exc:
+            logger.warning("APR row %s skipped: %s", raw_record.row_number, exc)
+            row_errors.append((raw_record.row_number, str(exc)))
 
-    return performance_rows, failed_records
+    return performance_rows, row_errors
 
 
 def map_apr_row(raw_data: dict[str, Any]) -> dict[str, Any]:
@@ -124,6 +141,13 @@ def map_apr_row(raw_data: dict[str, Any]) -> dict[str, Any]:
     )
     idle_time_seconds = time_to_seconds(
         require_raw_value(raw_data=raw_data, column_name="Total Idle Time")
+    )
+
+    connected_calls = parse_int(
+        get_raw_value(raw_data=raw_data, column_name="Connected")
+    )
+    positive_calls = parse_int(
+        get_raw_value(raw_data=raw_data, column_name="Positive")
     )
 
     return {
@@ -141,12 +165,15 @@ def map_apr_row(raw_data: dict[str, Any]) -> dict[str, Any]:
         "attendance": str(
             require_raw_value(raw_data=raw_data, column_name="Attendance")
         ),
-        "login_hours": staff_time_seconds,
+        # The APR report has no login column. The column is NOT NULL, so store 0
+        # instead of a copy of staff time that could be mistaken for real login time.
+        # Login time comes from the shift adherence report (login_hours_seconds).
+        "login_hours": 0,
         "staff_time": staff_time_seconds,
         "talk_time": talk_time_seconds,
         "break_time": break_time_seconds,
         "idle_time": idle_time_seconds,
-        "productivity_percent": parse_decimal(
+        "productivity_percent": parse_percent(
             get_raw_value(raw_data=raw_data, column_name="Productivity %")
         ),
         "total_calls": parse_int(
@@ -155,23 +182,43 @@ def map_apr_row(raw_data: dict[str, Any]) -> dict[str, Any]:
         "dialer_total_calls": parse_int(
             get_raw_value(raw_data=raw_data, column_name="Total Calls")
         ),
-        "dialflow_total_calls": parse_int(
-            get_raw_value(raw_data=raw_data, column_name="Total calls")
-        ),
-        "connected_calls": parse_int(
-            get_raw_value(raw_data=raw_data, column_name="Connected")
-        ),
+        "dialflow_total_calls": parse_dialflow_total_calls(raw_data),
+        "connected_calls": connected_calls,
         "not_connected_calls": parse_int(
             get_raw_value(raw_data=raw_data, column_name="Not Connected")
         ),
-        "positive_calls": parse_int(
-            get_raw_value(raw_data=raw_data, column_name="Positive")
+        "positive_calls": positive_calls,
+        "conversion_percent": calculate_conversion_percent(
+            positive_calls=positive_calls, connected_calls=connected_calls
         ),
-        "conversion_percent": 0,
         "tl_remark": str(
             get_raw_value(raw_data=raw_data, column_name="TL Remark") or ""
         ),
     }
+
+
+def calculate_conversion_percent(*, positive_calls: int, connected_calls: int) -> Decimal:
+    """Conversion = positive calls as a percentage of connected calls.
+
+    The APR report has no conversion column, so it is worked out from the call
+    counts. With no connected calls there is nothing to convert, so it is 0.
+    """
+    if connected_calls <= 0:
+        return Decimal("0")
+    percent = Decimal(positive_calls) * 100 / Decimal(connected_calls)
+    return percent.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def parse_dialflow_total_calls(raw_data: dict[str, Any]) -> int:
+    """Read the dialflow call count from a distinct "Total calls" column.
+
+    Column lookup ignores case, so "Total Calls" and "Total calls" would resolve
+    to the same column. Only use the dialflow value when the file really has
+    both columns; otherwise there is no separate dialflow figure.
+    """
+    if "Total calls" in raw_data and "Total Calls" in raw_data:
+        return parse_int(raw_data.get("Total calls"))
+    return 0
 
 
 def upsert_agent_daily_performance(
@@ -181,18 +228,26 @@ def upsert_agent_daily_performance(
     if not performance_rows:
         return
 
+    # An agent can work several campaigns in a day, so campaign is part of the key.
     latest_rows_by_key = {
-        (row["emp_id"], row["report_date"]): row
+        (row["emp_id"], row["report_date"], row["campaign"]): row
         for row in performance_rows
     }
 
-    for row in latest_rows_by_key.values():
-        existing_record = db.scalar(
+    existing_records = {
+        (record.emp_id, record.report_date, record.campaign): record
+        for record in db.scalars(
             select(AgentDailyPerformance).where(
-                AgentDailyPerformance.emp_id == row["emp_id"],
-                AgentDailyPerformance.report_date == row["report_date"],
+                AgentDailyPerformance.emp_id.in_({key[0] for key in latest_rows_by_key}),
+                AgentDailyPerformance.report_date.in_(
+                    {key[1] for key in latest_rows_by_key}
+                ),
             )
-        )
+        ).all()
+    }
+
+    for key, row in latest_rows_by_key.items():
+        existing_record = existing_records.get(key)
         if existing_record is None:
             db.add(AgentDailyPerformance(**row))
             continue
@@ -201,47 +256,5 @@ def upsert_agent_daily_performance(
             setattr(existing_record, field_name, value)
 
     db.commit()
-
-
-def mark_upload_processing(db: Session, upload_history: UploadHistory) -> None:
-    upload_history.upload_status = UPLOAD_STATUS_PROCESSING
-    upload_history.processing_started_at = datetime.now()
-    upload_history.processing_completed_at = None
-    upload_history.error_message = None
-    db.commit()
-    db.refresh(upload_history)
-
-
-def mark_upload_completed(
-    db: Session,
-    *,
-    upload_history: UploadHistory,
-    total_records: int,
-    processed_records: int,
-    failed_records: int,
-) -> None:
-    upload_history.upload_status = UPLOAD_STATUS_COMPLETED
-    upload_history.total_records = total_records
-    upload_history.processed_records = processed_records
-    upload_history.failed_records = failed_records
-    upload_history.processing_completed_at = datetime.now()
-    upload_history.error_message = None
-    db.commit()
-
-
-def mark_upload_failed(
-    db: Session,
-    *,
-    upload_history: UploadHistory,
-    total_records: int,
-    processed_records: int,
-    failed_records: int,
-    error_message: str,
-) -> None:
-    upload_history.upload_status = UPLOAD_STATUS_FAILED
-    upload_history.total_records = total_records
-    upload_history.processed_records = processed_records
-    upload_history.failed_records = failed_records
-    upload_history.processing_completed_at = datetime.now()
-    upload_history.error_message = error_message[:1000]
-    db.commit()
+    # Every agent in a report should also be listed in Employee Master.
+    sync_employees_from_report_rows(db, list(latest_rows_by_key.values()))

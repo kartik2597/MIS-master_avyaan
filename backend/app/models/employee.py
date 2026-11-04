@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, String, func
+from sqlalchemy import Date, DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,6 +15,13 @@ class Employee(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
+    )
+    # The upload that last wrote this row. Deleting that upload deletes the row.
+    upload_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("upload_history.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
     )
     emp_id: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     employee_name: Mapped[str] = mapped_column(String(255), index=True, nullable=False)

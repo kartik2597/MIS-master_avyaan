@@ -1,10 +1,13 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.agent_daily_performance import AgentDailyPerformance
+from app.models.agent_shift_adherence import AgentShiftAdherence
+from app.models.agent_shrinkage import AgentShrinkage
 from app.models.employee import Employee
 from app.schemas.employee import EmployeeCreate, EmployeeUpdate
 
@@ -31,11 +34,23 @@ def apply_employee_filters(
     tl_name: str | None = None,
 ) -> Select[tuple[Employee]]:
     if search:
-        pattern = f"%{search}%"
+        search = search.strip()
+    if search:
+        # Escape LIKE wildcards so typing "%" or "_" searches for the character.
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
         statement = statement.where(
             or_(
-                Employee.emp_id.ilike(pattern),
-                Employee.employee_name.ilike(pattern),
+                Employee.emp_id.ilike(pattern, escape="\\"),
+                Employee.employee_name.ilike(pattern, escape="\\"),
+                Employee.email.ilike(pattern, escape="\\"),
+                Employee.mobile.ilike(pattern, escape="\\"),
+                Employee.department.ilike(pattern, escape="\\"),
+                Employee.process.ilike(pattern, escape="\\"),
+                Employee.designation.ilike(pattern, escape="\\"),
+                Employee.manager_name.ilike(pattern, escape="\\"),
+                Employee.tl_name.ilike(pattern, escape="\\"),
+                Employee.location.ilike(pattern, escape="\\"),
             )
         )
     if emp_id:
@@ -98,8 +113,21 @@ def create_employee(db: Session, payload: EmployeeCreate) -> Employee:
 
 
 def update_employee(db: Session, employee: Employee, payload: EmployeeUpdate) -> Employee:
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    old_emp_id = employee.emp_id
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
         setattr(employee, field, value)
+
+    new_emp_id = changes.get("emp_id")
+    if new_emp_id and new_emp_id != old_emp_id:
+        # Report tables keep emp_id as plain text (no foreign key), so move
+        # their rows to the new ID in the same transaction.
+        for model in (AgentDailyPerformance, AgentShiftAdherence, AgentShrinkage):
+            db.execute(
+                update(model)
+                .where(model.emp_id == old_emp_id)
+                .values(emp_id=new_emp_id)
+            )
     return commit_employee_change(db, employee)
 
 
@@ -115,7 +143,7 @@ def commit_employee_change(db: Session, employee: Employee) -> Employee:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Employee with this emp_id already exists",
+            detail="Employee ID already exists, or the new ID clashes with existing report rows",
         ) from None
 
     db.refresh(employee)

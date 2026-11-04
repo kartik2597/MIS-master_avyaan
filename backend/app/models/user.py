@@ -32,6 +32,10 @@ class User(Base):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # The Employee ID this login belongs to. MANAGER and TL users are limited to
+    # the team under that employee. Not a foreign key on purpose: employee rows
+    # are replaced on re-import and that must not affect user accounts.
+    emp_id: Mapped[str | None] = mapped_column(String(50), index=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -1,4 +1,4 @@
-from datetime import datetime
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -9,22 +9,28 @@ from sqlalchemy.orm import Session
 from app.models.agent_shift_adherence import AgentShiftAdherence
 from app.models.raw_report_record import RawReportRecord
 from app.models.upload_history import UploadHistory
+from app.parsers.row_checks import check_report_row, load_known_emp_ids
+from app.parsers.upload_status import (
+    RowError,
+    mark_upload_completed,
+    mark_upload_failed,
+    mark_upload_processing,
+)
 from app.parsers.utils import (
     duration_to_minutes,
     get_raw_value,
     parse_bool,
     parse_date,
-    parse_decimal,
+    parse_percent,
     parse_time,
     require_raw_value,
     time_to_seconds,
 )
 from app.reports.report_types import ReportType
+from app.services.employee_sync import sync_employees_from_report_rows
 
 
-UPLOAD_STATUS_PROCESSING = "PROCESSING"
-UPLOAD_STATUS_COMPLETED = "COMPLETED"
-UPLOAD_STATUS_FAILED = "FAILED"
+logger = logging.getLogger(__name__)
 
 
 def parse_shift_adherence_upload(db: Session, upload_id: UUID) -> dict[str, int]:
@@ -37,7 +43,12 @@ def parse_shift_adherence_upload(db: Session, upload_id: UUID) -> dict[str, int]
     try:
         raw_records = get_shift_adherence_raw_records(db=db, upload_id=upload_id)
         total_records = len(raw_records)
-        adherence_rows, failed_records = map_shift_adherence_rows(raw_records)
+        adherence_rows, row_errors = map_shift_adherence_rows(
+            raw_records, known_emp_ids=load_known_emp_ids(db)
+        )
+        for row in adherence_rows:
+            row["upload_id"] = upload_id
+        failed_records = len(row_errors)
         processed_records = total_records - failed_records
 
         upsert_agent_shift_adherence(db=db, adherence_rows=adherence_rows)
@@ -47,6 +58,7 @@ def parse_shift_adherence_upload(db: Session, upload_id: UUID) -> dict[str, int]
             total_records=total_records,
             processed_records=processed_records,
             failed_records=failed_records,
+            row_errors=row_errors,
         )
 
         return {
@@ -104,17 +116,23 @@ def get_shift_adherence_raw_records(
 
 def map_shift_adherence_rows(
     raw_records: list[RawReportRecord],
-) -> tuple[list[dict[str, Any]], int]:
+    known_emp_ids: set[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[RowError]]:
     adherence_rows: list[dict[str, Any]] = []
-    failed_records = 0
+    row_errors: list[RowError] = []
 
     for raw_record in raw_records:
         try:
-            adherence_rows.append(map_shift_adherence_row(raw_record.raw_data))
-        except (TypeError, ValueError):
-            failed_records += 1
+            row = map_shift_adherence_row(raw_record.raw_data)
+            check_report_row(row, known_emp_ids=known_emp_ids)
+            adherence_rows.append(row)
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "Shift adherence row %s skipped: %s", raw_record.row_number, exc
+            )
+            row_errors.append((raw_record.row_number, str(exc)))
 
-    return adherence_rows, failed_records
+    return adherence_rows, row_errors
 
 
 def map_shift_adherence_row(raw_data: dict[str, Any]) -> dict[str, Any]:
@@ -156,7 +174,8 @@ def map_shift_adherence_row(raw_data: dict[str, Any]) -> dict[str, Any]:
         "login_plus_downtime_seconds": time_to_seconds(
             require_raw_value(raw_data=raw_data, column_name="Login + downtime")
         ),
-        "shift_login_adherence_percent": parse_decimal(
+        # Excel percent cells arrive as fractions (0.875), so use parse_percent.
+        "shift_login_adherence_percent": parse_percent(
             get_raw_value(raw_data=raw_data, column_name="Shift adherence Log IN")
         ),
         "adherence_status": str(
@@ -176,7 +195,7 @@ def map_shift_adherence_row(raw_data: dict[str, Any]) -> dict[str, Any]:
             true_values={"1", "true", "yes", "y", "non adherence"},
             false_values={"0", "false", "no", "n", "adherence"},
         ),
-        "non_adherence_percent": parse_decimal(
+        "non_adherence_percent": parse_percent(
             get_raw_value(raw_data=raw_data, column_name="Non Adherence %")
         ),
     }
@@ -194,13 +213,20 @@ def upsert_agent_shift_adherence(
         for row in adherence_rows
     }
 
-    for row in latest_rows_by_key.values():
-        existing_record = db.scalar(
+    existing_records = {
+        (record.emp_id, record.report_date): record
+        for record in db.scalars(
             select(AgentShiftAdherence).where(
-                AgentShiftAdherence.emp_id == row["emp_id"],
-                AgentShiftAdherence.report_date == row["report_date"],
+                AgentShiftAdherence.emp_id.in_({key[0] for key in latest_rows_by_key}),
+                AgentShiftAdherence.report_date.in_(
+                    {key[1] for key in latest_rows_by_key}
+                ),
             )
-        )
+        ).all()
+    }
+
+    for key, row in latest_rows_by_key.items():
+        existing_record = existing_records.get(key)
         if existing_record is None:
             db.add(AgentShiftAdherence(**row))
             continue
@@ -209,47 +235,5 @@ def upsert_agent_shift_adherence(
             setattr(existing_record, field_name, value)
 
     db.commit()
-
-
-def mark_upload_processing(db: Session, upload_history: UploadHistory) -> None:
-    upload_history.upload_status = UPLOAD_STATUS_PROCESSING
-    upload_history.processing_started_at = datetime.now()
-    upload_history.processing_completed_at = None
-    upload_history.error_message = None
-    db.commit()
-    db.refresh(upload_history)
-
-
-def mark_upload_completed(
-    db: Session,
-    *,
-    upload_history: UploadHistory,
-    total_records: int,
-    processed_records: int,
-    failed_records: int,
-) -> None:
-    upload_history.upload_status = UPLOAD_STATUS_COMPLETED
-    upload_history.total_records = total_records
-    upload_history.processed_records = processed_records
-    upload_history.failed_records = failed_records
-    upload_history.processing_completed_at = datetime.now()
-    upload_history.error_message = None
-    db.commit()
-
-
-def mark_upload_failed(
-    db: Session,
-    *,
-    upload_history: UploadHistory,
-    total_records: int,
-    processed_records: int,
-    failed_records: int,
-    error_message: str,
-) -> None:
-    upload_history.upload_status = UPLOAD_STATUS_FAILED
-    upload_history.total_records = total_records
-    upload_history.processed_records = processed_records
-    upload_history.failed_records = failed_records
-    upload_history.processing_completed_at = datetime.now()
-    upload_history.error_message = error_message[:1000]
-    db.commit()
+    # Every agent in a report should also be listed in Employee Master.
+    sync_employees_from_report_rows(db, list(latest_rows_by_key.values()))

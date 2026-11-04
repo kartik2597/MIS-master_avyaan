@@ -10,10 +10,13 @@ from app.models.upload_history import UploadHistory
 from app.models.user import User, UserRole
 from app.schemas.upload_history import (
     FileUploadDetectionResponse,
+    SheetUploadResult,
     UploadHistoryList,
     UploadHistoryRead,
+    UploadValidationReport,
 )
-from app.services.file_upload import upload_and_detect_report
+from app.services.file_upload import upload_and_detect_workbook
+from app.services.upload_report import build_validation_report
 from app.services.upload_history import (
     delete_upload_history,
     get_upload_history_or_404,
@@ -38,18 +41,33 @@ def upload_file_for_detection(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> FileUploadDetectionResponse:
-    upload_history, detection, validation_result, total_columns = upload_and_detect_report(
+    outcome = upload_and_detect_workbook(
         db=db,
         upload_file=file,
         uploaded_by=current_user,
     )
+    sheets = [
+        SheetUploadResult(
+            upload_id=sheet.upload_history.id,
+            sheet_name=sheet.sheet_name,
+            detected_report_type=sheet.detection.detected_report_type,
+            confidence_score=sheet.detection.confidence_score,
+            total_columns=sheet.total_columns,
+            total_records=sheet.upload_history.total_records,
+            missing_columns=sheet.validation_result.missing_columns,
+        )
+        for sheet in outcome.sheets
+    ]
+    first = sheets[0]
     return FileUploadDetectionResponse(
-        upload_id=upload_history.id,
-        file_name=upload_history.file_name,
-        detected_report_type=detection.detected_report_type,
-        confidence_score=detection.confidence_score,
-        total_columns=total_columns,
-        missing_columns=validation_result.missing_columns,
+        upload_id=first.upload_id,
+        file_name=outcome.sheets[0].upload_history.file_name,
+        detected_report_type=first.detected_report_type,
+        confidence_score=first.confidence_score,
+        total_columns=first.total_columns,
+        missing_columns=first.missing_columns,
+        sheets=sheets,
+        ignored_sheets=outcome.ignored_sheets,
     )
 
 
@@ -94,6 +112,25 @@ def read_upload_history_record(
         upload_id=upload_id,
         current_user=current_user,
     )
+
+
+@router.get(
+    "/{upload_id}/validation",
+    response_model=UploadValidationReport,
+    dependencies=[Depends(require_role(VIEW_ROLES))],
+)
+def read_upload_validation_report(
+    upload_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UploadValidationReport:
+    """Column problems and every skipped row ("row 45: invalid date") for one upload."""
+    upload = get_upload_history_or_404(
+        db=db,
+        upload_id=upload_id,
+        current_user=current_user,
+    )
+    return build_validation_report(upload)
 
 
 @router.delete(

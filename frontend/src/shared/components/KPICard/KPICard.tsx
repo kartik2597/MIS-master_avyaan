@@ -1,12 +1,11 @@
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
 interface KPICardProps {
   label: string;
   value: ReactNode;
-  delta?: number;
   suffix?: string;
   icon?: ComponentType<{ className?: string }>;
   tone?: "default" | "success" | "warning" | "info" | "destructive";
@@ -20,33 +19,45 @@ const toneMap: Record<NonNullable<KPICardProps["tone"]>, string> = {
   destructive: "bg-destructive/10 text-destructive",
 };
 
-export function KPICard({ label, value, delta, suffix, icon: Icon, tone = "default" }: KPICardProps) {
-  const trendIcon = delta == null ? Minus : delta > 0 ? ArrowUp : delta < 0 ? ArrowDown : Minus;
-  const TrendIcon = trendIcon;
-  const trendColor =
-    delta == null ? "text-muted-foreground" : delta > 0 ? "text-success" : delta < 0 ? "text-destructive" : "text-muted-foreground";
+const accentMap: Record<NonNullable<KPICardProps["tone"]>, string> = {
+  default: "bg-primary",
+  success: "bg-success",
+  warning: "bg-warning",
+  info: "bg-info",
+  destructive: "bg-destructive",
+};
 
+export function KPICard({ label, value, suffix, icon: Icon, tone = "default" }: KPICardProps) {
   return (
-    <Card className="p-4 hover:shadow-md transition-shadow">
+    <Card className="group relative overflow-hidden p-4 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-card-hover">
+      <span className={cn("absolute inset-y-0 left-0 w-1 opacity-70 group-hover:opacity-100", accentMap[tone])} />
       <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1 min-w-0">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide truncate">{label}</p>
+        <div className="min-w-0 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground leading-snug">{label}</p>
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-semibold text-foreground tabular-nums">{value}</span>
+            <span className="text-2xl font-semibold text-foreground tabular-nums tracking-tight">{value}</span>
             {suffix && <span className="text-sm text-muted-foreground">{suffix}</span>}
           </div>
-          {delta != null && (
-            <div className={cn("flex items-center gap-1 text-xs font-medium", trendColor)}>
-              <TrendIcon className="h-3 w-3" />
-              <span>{Math.abs(delta)}% vs last period</span>
-            </div>
-          )}
         </div>
         {Icon && (
-          <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg shrink-0", toneMap[tone])}>
-            <Icon className="h-5 w-5" />
+          <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg shrink-0", toneMap[tone])}>
+            <Icon className="h-4 w-4" />
           </div>
         )}
+      </div>
+    </Card>
+  );
+}
+
+export function KPICardSkeleton() {
+  return (
+    <Card className="p-4 shadow-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-3 flex-1">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-7 w-16" />
+        </div>
+        <Skeleton className="h-9 w-9 rounded-lg" />
       </div>
     </Card>
   );

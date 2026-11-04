@@ -1,6 +1,15 @@
+import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
+
+SECONDS_PER_DAY = 24 * 60 * 60
+
+# pandas writes timedeltas as ISO 8601 durations, e.g. "P0DT8H30M0S".
+ISO_DURATION_PATTERN = re.compile(
+    r"^P(?:(?P<days>\d+)D)?T?(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?"
+    r"(?:(?P<seconds>\d+(?:\.\d+)?)S)?$"
+)
 
 
 def clean_value(value: Any) -> Any:
@@ -45,9 +54,22 @@ def time_to_seconds(value: Any) -> int:
     if isinstance(value, timedelta):
         return int(value.total_seconds())
     if isinstance(value, (int, float, Decimal)):
-        return int(value)
+        numeric_value = float(value)
+        # Excel stores durations as a fraction of a day (0.5 == 12:00:00).
+        if 0 < numeric_value < 1:
+            return int(round(numeric_value * SECONDS_PER_DAY))
+        return int(numeric_value)
 
-    parts = str(value).split(":")
+    text_value = str(value).strip()
+    iso_match = ISO_DURATION_PATTERN.match(text_value)
+    if iso_match and text_value not in {"P", "PT"}:
+        days, hours, minutes, seconds = (
+            float(iso_match.group(group) or 0)
+            for group in ("days", "hours", "minutes", "seconds")
+        )
+        return int((days * SECONDS_PER_DAY) + (hours * 3600) + (minutes * 60) + seconds)
+
+    parts = text_value.split(":")
     if len(parts) != 3:
         raise ValueError(f"Invalid time value: {value}")
 
@@ -159,6 +181,28 @@ def parse_decimal(value: Any, *, default: Decimal = Decimal("0")) -> Decimal:
         return Decimal(normalized)
     except InvalidOperation as exc:
         raise ValueError(f"Invalid numeric value: {value}") from exc
+
+
+def parse_percent(value: Any, *, default: Decimal = Decimal("0")) -> Decimal:
+    """Parse a percentage column into percent points (87.5 means 87.5%).
+
+    - Text with a % sign ("87.5%") is taken as written.
+    - Excel percent cells reach us as fractions (0.875 for 87.5%), so a plain
+      number above 0 and up to 1 is scaled by 100.
+    - Any other number (e.g. 87.5) is taken as already being in percent points.
+
+    Limitation: a genuine plain-number value of 1 or less (such as 0.5 meaning
+    0.5%) cannot be told apart from an Excel fraction and will be scaled up.
+    """
+    value = clean_value(value)
+    if is_blank(value):
+        return default
+
+    number = parse_decimal(value)
+    has_percent_sign = isinstance(value, str) and "%" in value
+    if not has_percent_sign and Decimal("0") < number <= Decimal("1"):
+        return number * 100
+    return number
 
 
 def parse_date(value: Any) -> date:

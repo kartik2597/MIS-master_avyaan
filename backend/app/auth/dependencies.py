@@ -1,9 +1,9 @@
 from collections.abc import Callable, Sequence
 from uuid import UUID
 
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -30,11 +30,13 @@ def get_current_user(
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
         )
+        if payload.get("type") != "access":
+            raise credentials_exception
         subject = payload.get("sub")
         if subject is None:
             raise credentials_exception
         user_id = UUID(subject)
-    except (JWTError, ValueError):
+    except (jwt.PyJWTError, ValueError):
         raise credentials_exception from None
 
     user = db.get(User, user_id)

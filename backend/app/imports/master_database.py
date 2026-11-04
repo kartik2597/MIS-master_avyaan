@@ -1,4 +1,4 @@
-from datetime import datetime
+import logging
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -10,14 +10,17 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.employee import Employee
 from app.models.upload_history import UploadHistory
+from app.parsers.upload_status import (
+    RowError,
+    mark_upload_completed,
+    mark_upload_failed,
+    mark_upload_processing,
+)
 from app.reports.report_types import ReportType
-from app.services.file_upload import build_upload_directory
+from app.services.file_upload import build_upload_directory, is_importable
 
 
-UPLOAD_STATUS_VALIDATED = "VALIDATED"
-UPLOAD_STATUS_PROCESSING = "PROCESSING"
-UPLOAD_STATUS_COMPLETED = "COMPLETED"
-UPLOAD_STATUS_FAILED = "FAILED"
+logger = logging.getLogger(__name__)
 
 EMPLOYEE_COLUMN_ALIASES = {
     "emp_id": ["emp_id", "emp id", "employee id", "employee_id", "Employee ID"],
@@ -53,10 +56,24 @@ def import_master_database(db: Session, upload_id: UUID) -> dict[str, int]:
     mark_upload_processing(db=db, upload_history=upload_history)
 
     try:
-        dataframe = read_uploaded_dataframe(resolve_uploaded_file_path(upload_history))
+        # A workbook can hold several reports; open the sheet this upload came from.
+        sheet_name = (upload_history.validation_result or {}).get("sheet_name")
+        dataframe = read_uploaded_dataframe(
+            resolve_uploaded_file_path(upload_history), sheet_name
+        )
         total_records = len(dataframe.index)
-        employees, failed_records = map_dataframe_to_employees(dataframe)
+        ensure_required_columns(list(dataframe.columns))
+        employees, row_errors = map_dataframe_to_employees(dataframe)
+        for employee_row in employees:
+            employee_row["upload_id"] = upload_id
         processed_records = upsert_employees(db=db, employee_rows=employees)
+        # Rows dropped as duplicates of an earlier emp_id count as failed.
+        duplicate_rows = len(employees) - processed_records
+        failed_records = len(row_errors) + duplicate_rows
+        if duplicate_rows:
+            row_errors.append(
+                (0, f"{duplicate_rows} duplicate Employee ID row(s); the last one was kept")
+            )
 
         mark_upload_completed(
             db=db,
@@ -64,6 +81,7 @@ def import_master_database(db: Session, upload_id: UUID) -> dict[str, int]:
             total_records=total_records,
             processed_records=processed_records,
             failed_records=failed_records,
+            row_errors=row_errors,
         )
         return {
             "total_records": total_records,
@@ -93,7 +111,7 @@ def get_upload_for_import(db: Session, upload_id: UUID) -> UploadHistory:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Upload is not a MASTER_DATABASE report",
         )
-    if upload_history.upload_status != UPLOAD_STATUS_VALIDATED:
+    if not is_importable(upload_history):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Upload must be validated before import",
@@ -118,17 +136,18 @@ def resolve_uploaded_file_path(upload_history: UploadHistory) -> Path:
     )
 
 
-def read_uploaded_dataframe(file_path: Path):
+def read_uploaded_dataframe(file_path: Path, sheet_name: str | None = None):
     import pandas as pd
 
     extension = file_path.suffix.lower()
+    sheet = sheet_name if sheet_name is not None else 0
     try:
         if extension == ".csv":
             return pd.read_csv(file_path)
         if extension == ".xlsx":
-            return pd.read_excel(file_path, engine="openpyxl")
+            return pd.read_excel(file_path, sheet_name=sheet, engine="openpyxl")
         if extension == ".xls":
-            return pd.read_excel(file_path, engine="xlrd")
+            return pd.read_excel(file_path, sheet_name=sheet, engine="xlrd")
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -141,18 +160,33 @@ def read_uploaded_dataframe(file_path: Path):
     )
 
 
-def map_dataframe_to_employees(dataframe) -> tuple[list[dict[str, Any]], int]:
+def ensure_required_columns(uploaded_columns: list[str]) -> None:
+    column_map = build_column_map(uploaded_columns)
+    missing_fields = sorted(REQUIRED_EMPLOYEE_FIELDS - set(column_map))
+    if missing_fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Master database file is missing columns for: "
+            + ", ".join(missing_fields),
+        )
+
+
+def map_dataframe_to_employees(
+    dataframe,
+) -> tuple[list[dict[str, Any]], list[RowError]]:
     column_map = build_column_map(list(dataframe.columns))
     employee_rows: list[dict[str, Any]] = []
-    failed_records = 0
+    row_errors: list[RowError] = []
 
-    for _, row in dataframe.iterrows():
+    for row_number, (_, row) in enumerate(dataframe.iterrows(), start=2):
         try:
             employee_rows.append(map_employee_row(row=row, column_map=column_map))
-        except ValueError:
-            failed_records += 1
+        except ValueError as exc:
+            # row_number is the spreadsheet row (row 1 is the header).
+            logger.warning("Master database row %s skipped: %s", row_number, exc)
+            row_errors.append((row_number, str(exc)))
 
-    return employee_rows, failed_records
+    return employee_rows, row_errors
 
 
 def build_column_map(uploaded_columns: list[str]) -> dict[str, str]:
@@ -177,16 +211,21 @@ def map_employee_row(row, column_map: dict[str, str]) -> dict[str, Any]:
         for field_name, column_name in column_map.items()
     }
 
-    missing_fields = [
+    missing_fields = sorted(
         field_name
         for field_name in REQUIRED_EMPLOYEE_FIELDS
         if is_blank(employee_data.get(field_name))
-    ]
+    )
     if missing_fields:
-        raise ValueError("Missing required employee fields")
+        raise ValueError("Missing required employee fields: " + ", ".join(missing_fields))
 
     employee_data["date_of_joining"] = parse_date(employee_data["date_of_joining"])
-    employee_data["emp_id"] = str(employee_data["emp_id"])
+    # Every other column is text in the database. Excel hands numeric cells
+    # (Mobile, Employee ID) back as numpy numbers, which the database driver
+    # cannot write into a text column, so convert them here.
+    for field_name in list(employee_data):
+        if field_name != "date_of_joining":
+            employee_data[field_name] = to_text(employee_data[field_name])
     return employee_data
 
 
@@ -194,6 +233,7 @@ def upsert_employees(db: Session, employee_rows: list[dict[str, Any]]) -> int:
     if not employee_rows:
         return 0
 
+    # Later rows win when the same emp_id appears more than once.
     unique_employee_rows = {
         row["emp_id"]: row for row in employee_rows
     }
@@ -218,45 +258,7 @@ def upsert_employees(db: Session, employee_rows: list[dict[str, Any]]) -> int:
     if new_employees:
         db.add_all(new_employees)
     db.commit()
-    return len(employee_rows)
-
-
-def mark_upload_processing(db: Session, upload_history: UploadHistory) -> None:
-    upload_history.upload_status = UPLOAD_STATUS_PROCESSING
-    upload_history.processing_started_at = datetime.now()
-    upload_history.processing_completed_at = None
-    upload_history.error_message = None
-    db.commit()
-    db.refresh(upload_history)
-
-
-def mark_upload_completed(
-    db: Session,
-    *,
-    upload_history: UploadHistory,
-    total_records: int,
-    processed_records: int,
-    failed_records: int,
-) -> None:
-    upload_history.upload_status = UPLOAD_STATUS_COMPLETED
-    upload_history.total_records = total_records
-    upload_history.processed_records = processed_records
-    upload_history.failed_records = failed_records
-    upload_history.processing_completed_at = datetime.now()
-    upload_history.error_message = None
-    db.commit()
-
-
-def mark_upload_failed(
-    db: Session,
-    *,
-    upload_history: UploadHistory,
-    error_message: str,
-) -> None:
-    upload_history.upload_status = UPLOAD_STATUS_FAILED
-    upload_history.processing_completed_at = datetime.now()
-    upload_history.error_message = error_message[:1000]
-    db.commit()
+    return len(unique_employee_rows)
 
 
 def normalize_column(column_name: str) -> str:
@@ -275,6 +277,16 @@ def clean_value(value: Any) -> Any:
 
 def is_blank(value: Any) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
+
+
+def to_text(value: Any) -> str:
+    """Turn a cell into clean text: numpy numbers become plain Python, and a
+    whole number read as a float (9876543210.0) loses its ".0"."""
+    if hasattr(value, "item"):
+        value = value.item()
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return str(value).strip()
 
 
 def parse_date(value: Any):

@@ -1,5 +1,10 @@
 import { apiRequest } from "@/lib/api-client";
-import type { FileUploadDetectionResponse, Paginated, UploadHistory } from "./types";
+import type {
+  FileUploadDetectionResponse,
+  Paginated,
+  UploadHistory,
+  UploadValidationReport,
+} from "./types";
 
 export interface UploadListParams {
   page?: number;
@@ -32,4 +37,9 @@ export function listUploads(params: UploadListParams = {}) {
 
 export function deleteUpload(id: string) {
   return apiRequest<void>(`/uploads/${id}`, { method: "DELETE" });
+}
+
+// Column problems and every skipped row ("row 45: invalid date") for one upload.
+export function getUploadValidation(id: string) {
+  return apiRequest<UploadValidationReport>(`/uploads/${id}/validation`);
 }

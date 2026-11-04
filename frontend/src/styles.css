@@ -5,6 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --shadow-card: 0 1px 2px oklch(0.22 0.04 260 / 6%), 0 1px 3px oklch(0.22 0.04 260 / 4%);
+  --shadow-card-hover: 0 4px 12px oklch(0.22 0.04 260 / 10%), 0 2px 4px oklch(0.22 0.04 260 / 6%);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -50,6 +53,7 @@
 }
 
 :root {
+  color-scheme: light;
   --radius: 0.6rem;
   --background: oklch(0.985 0.005 250);
   --foreground: oklch(0.22 0.04 260);
@@ -92,6 +96,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.16 0.025 260);
   --foreground: oklch(0.95 0.01 250);
   --card: oklch(0.22 0.03 260);
@@ -139,6 +144,47 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: var(--font-sans);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}
+
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, oklch(1 0 0 / 6%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(1 0 0 / 6%) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Gentle bob for the floating cards in the login illustration. */
+@keyframes art-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@utility animate-float {
+  animation: art-float 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

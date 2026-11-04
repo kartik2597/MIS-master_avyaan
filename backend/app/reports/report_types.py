@@ -12,4 +12,7 @@ class ReportType(str, Enum):
     SUPPORT_ADHERENCE = "SUPPORT_ADHERENCE"
     MASTER_DATABASE = "MASTER_DATABASE"
     TRAINING_DATA = "TRAINING_DATA"
-
+    # Compact "test data" workbook format: one sheet per report.
+    EMPLOYEE_ROSTER = "EMPLOYEE_ROSTER"
+    DAILY_ACTIVITY = "DAILY_ACTIVITY"
+    SHRINKAGE_HOURS = "SHRINKAGE_HOURS"

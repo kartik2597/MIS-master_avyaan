@@ -38,10 +38,30 @@ class EmployeeUpdate(BaseModel):
     location: str | None = Field(default=None, min_length=1, max_length=100)
 
 
-class EmployeeRead(EmployeeBase):
+class EmployeeRead(BaseModel):
+    """An employee as stored.
+
+    Deliberately looser than EmployeeBase: employees created from a report or a
+    roster upload have no email, mobile, TL or location, so those are empty
+    strings. The strict rules above are for people typing a record in, not for
+    reading back what is already saved.
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    emp_id: str
+    employee_name: str
+    email: str
+    mobile: str
+    department: str
+    process: str
+    designation: str
+    manager_name: str
+    tl_name: str
+    date_of_joining: date
+    employment_status: str
+    location: str
     created_at: datetime
     updated_at: datetime
 

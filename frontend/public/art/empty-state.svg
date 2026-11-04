@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" fill="none" role="img" aria-label="Empty state: documents with a magnifying glass">
+  <ellipse cx="80" cy="108" rx="50" ry="7" fill="#3B6FE0" fill-opacity=".08"/>
+  <rect x="54" y="16" width="58" height="76" rx="8" transform="rotate(8 83 54)" fill="#EEF2FB" stroke="#D5DDEE"/>
+  <rect x="42" y="24" width="64" height="80" rx="8" fill="#fff" stroke="#D5DDEE"/>
+  <rect x="54" y="38" width="40" height="6" rx="3" fill="#E3E9F6"/>
+  <rect x="54" y="50" width="30" height="6" rx="3" fill="#E3E9F6"/>
+  <rect x="54" y="62" width="42" height="6" rx="3" fill="#E3E9F6"/>
+  <rect x="54" y="80" width="24" height="8" rx="4" fill="#3B6FE0" fill-opacity=".3"/>
+  <circle cx="112" cy="84" r="14" fill="#3B6FE0" fill-opacity=".1" stroke="#3B6FE0" stroke-width="4"/>
+  <path d="M122 94 L134 106" stroke="#3B6FE0" stroke-width="5" stroke-linecap="round"/>
+  <path d="M30 34 v8 M26 38 h8" stroke="#7BA6FF" stroke-width="2" stroke-linecap="round"/>
+  <path d="M132 30 v6 M129 33 h6" stroke="#2FBF8A" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="24" cy="78" r="2.5" fill="#F2A93B"/>
+</svg>

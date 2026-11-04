@@ -2,7 +2,16 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Integer, Numeric, String, func
+from sqlalchemy import (
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -11,11 +20,26 @@ from app.database.base import Base
 
 class AgentDailyPerformance(Base):
     __tablename__ = "agent_daily_performance"
+    __table_args__ = (
+        UniqueConstraint(
+            "emp_id",
+            "report_date",
+            "campaign",
+            name="uq_agent_daily_performance_emp_date_campaign",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
+    )
+    # The upload that last wrote this row. Deleting that upload deletes the row.
+    upload_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("upload_history.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
     )
     emp_id: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
     employee_name: Mapped[str] = mapped_column(String(255), nullable=False)

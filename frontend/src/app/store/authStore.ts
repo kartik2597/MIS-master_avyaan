@@ -1,7 +1,17 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import * as authApi from "@/services/api/auth";
+import { UNAUTHORIZED_EVENT } from "@/lib/api-client";
+import {
+  TOKEN_STORAGE_KEY,
+  USER_STORAGE_KEY,
+  clearStoredAuth,
+  readStored,
+  saveRefreshToken,
+  saveToken,
+  saveUser,
+} from "@/lib/auth-storage";
 
-export type Role = "ADMIN" | "MIS" | "MANAGER";
+export type Role = "ADMIN" | "MIS" | "MANAGER" | "TL";
 
 export interface AuthUser {
   id: string;
@@ -9,9 +19,6 @@ export interface AuthUser {
   email: string;
   role: Role;
 }
-
-const USER_STORAGE_KEY = "mis_master_auth_user";
-const TOKEN_STORAGE_KEY = "mis_master_auth_token";
 
 const listeners = new Set<() => void>();
 let current: AuthUser | null = null;
@@ -22,37 +29,33 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
-function readStorage(key: string): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
-}
-
 function loadUser(): AuthUser | null {
   try {
-    const raw = readStorage(USER_STORAGE_KEY);
+    const raw = readStored(USER_STORAGE_KEY);
     return raw ? (JSON.parse(raw) as AuthUser) : null;
   } catch {
     return null;
   }
 }
 
+// The API returned 401 (expired or invalid token): drop the in-memory session
+// as well, otherwise the UI keeps showing a logged-in user until a refresh.
+// MainLayout reacts to `user` becoming null and sends the person to /login
+// through the router, so no full page reload is needed here.
+function handleUnauthorized() {
+  current = null;
+  token = null;
+  clearStoredAuth();
+  emit();
+}
+
 function ensureInit() {
   if (!initialized && typeof window !== "undefined") {
     current = loadUser();
-    token = readStorage(TOKEN_STORAGE_KEY);
+    token = readStored(TOKEN_STORAGE_KEY);
+    window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
     initialized = true;
   }
-}
-
-function persistSession(user: AuthUser, accessToken: string, remember: boolean) {
-  if (typeof window === "undefined") return;
-  const storage = remember ? window.localStorage : window.sessionStorage;
-  const otherStorage = remember ? window.sessionStorage : window.localStorage;
-
-  storage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-  storage.setItem(TOKEN_STORAGE_KEY, accessToken);
-  otherStorage.removeItem(USER_STORAGE_KEY);
-  otherStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
 export const authStore = {
@@ -67,42 +70,49 @@ export const authStore = {
   },
   getToken(): string | null {
     ensureInit();
-    return token;
+    // Read from storage: the api client swaps the token in the background.
+    return readStored(TOKEN_STORAGE_KEY) ?? token;
   },
   isAuthenticated(): boolean {
     ensureInit();
     return Boolean(token);
   },
- async login(email: string, password: string, remember: boolean): Promise<AuthUser> {
-  const authToken = await authApi.login(email, password);
-  token = authToken.access_token;
+  async login(email: string, password: string, remember: boolean): Promise<AuthUser> {
+    const authToken = await authApi.login(email, password);
 
-  // Token save karo before calling /auth/me
-  const storage = remember ? window.localStorage : window.sessionStorage;
-  storage.setItem(TOKEN_STORAGE_KEY, token);
+    // Start from a clean slate, then save the new token in exactly one storage.
+    // Without this, an old token left in localStorage would be read first
+    // (even when "Remember me" is off) and /auth/me would run with the wrong token.
+    clearStoredAuth();
+    saveToken(authToken.access_token, remember);
+    if (authToken.refresh_token) saveRefreshToken(authToken.refresh_token, remember);
+    token = authToken.access_token;
 
-  const profile = await authApi.getCurrentUser();
+    let profile: Awaited<ReturnType<typeof authApi.getCurrentUser>>;
+    try {
+      profile = await authApi.getCurrentUser();
+    } catch (error) {
+      // Do not leave a half-finished session behind if /auth/me fails.
+      token = null;
+      clearStoredAuth();
+      throw error;
+    }
 
-  const user: AuthUser = {
-    id: profile.id,
-    fullName: profile.full_name,
-    email: profile.email,
-    role: profile.role,
-  };
+    const user: AuthUser = {
+      id: profile.id,
+      fullName: profile.full_name,
+      email: profile.email,
+      role: profile.role,
+    };
     current = user;
-    persistSession(user, token, remember);
+    saveUser(user, remember);
     emit();
     return user;
   },
   logout() {
     current = null;
     token = null;
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(USER_STORAGE_KEY);
-      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-      window.sessionStorage.removeItem(USER_STORAGE_KEY);
-      window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-    }
+    clearStoredAuth();
     emit();
   },
 };
