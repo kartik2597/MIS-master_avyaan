@@ -27,7 +27,10 @@ from app.services.upload_history import (
 router = APIRouter()
 
 VIEW_ROLES = [UserRole.ADMIN, UserRole.MIS, UserRole.MANAGER, UserRole.TL]
-DELETE_ROLES = [UserRole.ADMIN, UserRole.MIS]
+# Everyone who can upload can delete. ADMIN and MIS can delete any upload; the
+# other roles can only reach (and so only delete) their own, because
+# get_upload_history_or_404 hides other people's uploads from them.
+DELETE_ROLES = VIEW_ROLES
 
 
 @router.post(

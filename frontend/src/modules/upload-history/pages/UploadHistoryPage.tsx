@@ -168,14 +168,14 @@ export function UploadHistoryPage() {
               <Database className="h-4 w-4 mr-2" /> Import
             </Button>
           )}
-          {canWrite && (
-            <ConfirmDeleteButton
-              title="Delete upload?"
-              description={`This will permanently delete ${row.original_file_name} and all the data imported from it. This cannot be undone.`}
-              disabled={deleteMutation.isPending}
-              onConfirm={() => deleteMutation.mutate(row.id)}
-            />
-          )}
+          {/* Admin/MIS see every upload; other roles only see their own, so the
+              delete button is safe to show on every row they can see. */}
+          <ConfirmDeleteButton
+            title="Delete upload?"
+            description={`This will permanently delete ${row.original_file_name} and all the data imported from it. This cannot be undone.`}
+            disabled={deleteMutation.isPending}
+            onConfirm={() => deleteMutation.mutate(row.id)}
+          />
         </div>
       ),
     },

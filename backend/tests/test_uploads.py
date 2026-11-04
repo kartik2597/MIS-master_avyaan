@@ -79,15 +79,24 @@ def test_upload_history_lists_the_upload(client, auth_headers):
     assert response.json()["total"] == 1
 
 
-def test_only_admin_or_mis_can_delete_an_upload(client, auth_headers):
+def test_users_can_delete_only_their_own_uploads(client, auth_headers):
     admin_headers = auth_headers(UserRole.ADMIN)
-    upload_id = upload(
+    admin_upload_id = upload(
         client, admin_headers, f"{MASTER_HEADER}\n{MASTER_ROW}\n"
     ).json()["upload_id"]
 
     tl_headers = auth_headers(UserRole.TL)
-    assert client.delete(f"/uploads/{upload_id}", headers=tl_headers).status_code == 403
-    assert client.delete(f"/uploads/{upload_id}", headers=admin_headers).status_code == 204
+    tl_upload_id = upload(
+        client, tl_headers, f"{MASTER_HEADER}\n{MASTER_ROW}\n", name="tl.csv"
+    ).json()["upload_id"]
+
+    # A TL cannot see, so cannot delete, someone else's upload.
+    assert client.delete(f"/uploads/{admin_upload_id}", headers=tl_headers).status_code == 404
+    # ...but can delete the one they uploaded themselves.
+    assert client.delete(f"/uploads/{tl_upload_id}", headers=tl_headers).status_code == 204
+    assert client.get(f"/uploads/{tl_upload_id}", headers=admin_headers).status_code == 404
+    # Admin can delete any upload.
+    assert client.delete(f"/uploads/{admin_upload_id}", headers=admin_headers).status_code == 204
 
 
 # --- Import endpoint -------------------------------------------------------
