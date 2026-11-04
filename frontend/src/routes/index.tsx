@@ -5,7 +5,7 @@ export const Route = createFileRoute("/")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "MIS Master 2.0" },
+      { title: "MIS Master" },
       { name: "description", content: "Centralised reporting and dashboard platform for Agent & Support operations." },
     ],
   }),

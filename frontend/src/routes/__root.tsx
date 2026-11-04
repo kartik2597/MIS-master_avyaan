@@ -80,9 +80,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "MIS Master 2.0" },
+      { title: "MIS Master" },
       { name: "description", content: "Centralised reporting and dashboard platform for Agent & Support operations." },
-      { property: "og:title", content: "MIS Master 2.0" },
+      { property: "og:title", content: "MIS Master" },
       { property: "og:description", content: "Centralised reporting and dashboard platform for Agent & Support operations." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

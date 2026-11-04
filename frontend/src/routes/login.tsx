@@ -11,7 +11,7 @@ export const Route = createFileRoute("/login")({
       throw redirect({ to: "/dashboard/agent" });
     }
   },
-  head: () => ({ meta: [{ title: "Sign in · MIS Master 2.0" }] }),
+  head: () => ({ meta: [{ title: "Sign in · MIS Master" }] }),
   component: LoginRoute,
 });
 

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     )
 
     PROJECT_NAME: str = Field(
-        "MIS Master 2.O",
+        "MIS Master",
         validation_alias="APP_PROJECT_NAME",
     )
 

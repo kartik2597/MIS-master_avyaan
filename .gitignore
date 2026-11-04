@@ -1,15 +1,21 @@
 # Python
-backend/.venv/
-backend/venv/
-backend/__pycache__/
-backend/**/*.pyc
-backend/.pytest_cache/
-backend/.mypy_cache/
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage/
+htmlcov/
 
 # Environment
-backend/.env
-frontend/.env
-frontend/.env.local
+.env
+.env.*
+!.env.example
+!**/.env.example
 
 # Database
 backend/*.db
@@ -20,14 +26,22 @@ backend/storage/
 backend/uploads/
 
 # Node
-frontend/node_modules/
+**/node_modules/
+.bun/
+frontend/.vite/
+frontend/coverage/
+frontend/.nyc_output/
 
 # Build
 frontend/dist/
 frontend/build/
+frontend/.output/
+frontend/.tanstack/
 
 # VS Code
 .vscode/
+.idea/
+*.code-workspace
 
 # OS
 .DS_Store
@@ -35,3 +49,4 @@ Thumbs.db
 
 # Logs
 *.log
+logs/

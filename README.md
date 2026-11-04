@@ -1,4 +1,4 @@
-# MIS Master 2.O
+# MIS Master
 
 MIS Master is a workforce reporting and analytics application for call-center operations. It uploads and validates Excel or CSV reports, imports the data into PostgreSQL, and presents dashboards, employee records, upload history, and role-based team views.
 
@@ -50,7 +50,7 @@ If a MANAGER or TL user has no Employee ID or the ID cannot be found, the dashbo
 ## Project Structure
 
 ```text
-MIS-Master-2.O/
+MIS Master/
 ├── backend/
 │   ├── app/
 │   │   ├── api/routes/       # FastAPI route handlers
