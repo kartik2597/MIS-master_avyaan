@@ -151,7 +151,12 @@ export function AgentDashboard() {
     );
   }
 
-  const presentPercent = percentOf(data.present_count, data.head_count);
+  // head_count and present_count are rounded averages, so prefer the percentage the
+  // backend works out from the unrounded totals.
+  const presentPercent =
+    data.present_percent != null
+      ? Number(data.present_percent)
+      : percentOf(data.present_count, data.head_count);
   const adherencePercent = percentOf(
     data.shift_adherence_count,
     data.shift_adherence_count + data.non_adherence_count,

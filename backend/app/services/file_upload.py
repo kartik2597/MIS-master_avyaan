@@ -17,6 +17,7 @@ from app.models.upload_history import UploadHistory
 from app.models.user import User
 from app.reports.detector import detect_report_type
 from app.reports.detector.service import DetectionResult
+from app.reports.report_types import ReportType
 from app.reports.schemas import ReportValidationResult
 from app.reports.validators import validate_uploaded_report
 from app.services.raw_report_records import save_raw_report_rows
@@ -49,6 +50,21 @@ class WorkbookUpload:
     sheets: list[SheetUpload]
     # Sheets that matched no report type (notes, metric guides...) and were skipped.
     ignored_sheets: list[str]
+
+
+def has_importer(report_type: str) -> bool:
+    """Whether an importer exists for this report type.
+
+    Some report types can be detected and validated but have no importer yet.
+    The importer table lives with the import routes, so it is imported here to
+    avoid a circular import.
+    """
+    from app.api.routes.imports import IMPORTERS
+
+    try:
+        return ReportType(report_type) in IMPORTERS
+    except ValueError:
+        return False
 
 
 def is_importable(upload_history: UploadHistory) -> bool:
@@ -427,15 +443,26 @@ def update_upload_validation_result(
     stored_result = validation_result.model_dump(mode="json")
     stored_result["sheet_name"] = sheet_name
     upload_history.validation_result = stored_result
+    # A file can be valid for a report type that has no importer yet. It must not
+    # sit at VALIDATED forever, so say plainly that it cannot be imported.
+    unsupported = validation_result.valid and not has_importer(upload_history.report_type)
     upload_history.upload_status = (
-        UPLOAD_STATUS_VALIDATED if validation_result.valid else UPLOAD_STATUS_FAILED
+        UPLOAD_STATUS_VALIDATED
+        if validation_result.valid and not unsupported
+        else UPLOAD_STATUS_FAILED
     )
     upload_history.total_records = total_records
-    upload_history.error_message = (
-        None
-        if validation_result.valid
-        else "Required columns are missing or report type could not be validated"
-    )
+    if not validation_result.valid:
+        upload_history.error_message = (
+            "Required columns are missing or report type could not be validated"
+        )
+    elif unsupported:
+        upload_history.error_message = (
+            f"{upload_history.report_type} reports are recognised, but importing "
+            "them is not supported yet."
+        )
+    else:
+        upload_history.error_message = None
     db.commit()
     db.refresh(upload_history)
     return upload_history

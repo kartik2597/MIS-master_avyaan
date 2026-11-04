@@ -6,6 +6,15 @@ from app.reports.headers import map_uploaded_columns, normalize_column_name
 from app.reports.registry import REPORT_REGISTRY, get_header_lookup
 
 
+# A file is only given a report type when it matches enough of that type's required
+# columns. Without this, the small types (3-4 required columns, e.g. CALL_COUNT or
+# TRAINING_DATA) could claim any file that happened to share an "Agent ID" or
+# "Employee Name" column. A file below the bar is left as UNKNOWN, so the person
+# sees that it was not recognised instead of a misleading list of missing columns.
+MIN_DETECTION_CONFIDENCE = 70
+MIN_MATCHED_COLUMNS = 3
+
+
 class DetectionResult(BaseModel):
     detected_report_type: str | None
     confidence_score: int = Field(ge=0, le=100)
@@ -46,7 +55,11 @@ def detect_report_type(uploaded_columns: list[str]) -> DetectionResult:
         if is_better_detection(result, best_result):
             best_result = result
 
-    if best_result is None or best_result.confidence_score == 0:
+    if (
+        best_result is None
+        or best_result.confidence_score < MIN_DETECTION_CONFIDENCE
+        or len(best_result.matched_columns) < MIN_MATCHED_COLUMNS
+    ):
         return DetectionResult(
             detected_report_type=None,
             confidence_score=0,

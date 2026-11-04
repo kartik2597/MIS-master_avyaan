@@ -1,6 +1,8 @@
 import re
 import time
 import uuid
+from contextlib import asynccontextmanager, suppress
+import asyncio
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,12 +10,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.logging import configure_logging
+from app.services.report_scheduler import start_report_scheduler
 
 configure_logging()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Run the scheduled-report loop for as long as the server is up."""
+    scheduler = start_report_scheduler()
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.cancel()
+            with suppress(asyncio.CancelledError):
+                await scheduler
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     debug=settings.DEBUG,
+    lifespan=lifespan,
 )
 
 SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")

@@ -7,6 +7,10 @@ from pydantic import BaseModel, Field
 class DashboardKpis(BaseModel):
     head_count: int = Field(ge=0)
     present_count: int = Field(ge=0)
+    # Present as a share of head count (0-100), worked out from the unrounded totals.
+    # head_count and present_count are rounded averages, so dividing them gives a
+    # slightly wrong percentage. None when there is no head count to divide by.
+    present_percent: Decimal | None = Field(default=None, ge=0, le=100)
     late_login_count: int = Field(ge=0)
     early_logout_count: int = Field(ge=0)
     shift_adherence_count: int = Field(ge=0)

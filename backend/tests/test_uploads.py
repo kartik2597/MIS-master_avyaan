@@ -69,6 +69,28 @@ def test_three_column_master_file_is_not_validated(client, auth_headers):
     assert imported.status_code == 400
 
 
+def test_valid_file_of_a_type_with_no_importer_is_not_left_validated(client, auth_headers):
+    # TRAINING_DATA is detected and its columns are valid, but nothing can import
+    # it yet. It must not sit at VALIDATED: that promises an import that cannot run.
+    headers = auth_headers()
+    text = (
+        "Employee ID,Employee Name,Training Name,Training Date\n"
+        "E100,Asha Rao,Onboarding,2026-11-01\n"
+    )
+
+    response = upload(client, headers, text, name="training.csv")
+
+    assert response.status_code == 201
+    assert response.json()["detected_report_type"] == "TRAINING_DATA"
+    upload_id = response.json()["upload_id"]
+    record = client.get(f"/uploads/{upload_id}", headers=headers).json()
+    assert record["upload_status"] == "FAILED"
+    assert "not supported yet" in record["error_message"]
+
+    imported = client.post(f"/imports/TRAINING_DATA/{upload_id}", headers=headers)
+    assert imported.status_code == 400
+
+
 def test_upload_history_lists_the_upload(client, auth_headers):
     headers = auth_headers()
     upload(client, headers, f"{MASTER_HEADER}\n{MASTER_ROW}\n")

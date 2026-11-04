@@ -55,6 +55,9 @@ def engine():
 def client(engine, tmp_path, monkeypatch):
     # Uploaded files go to a throwaway folder, never the real storage folder.
     monkeypatch.setattr(settings, "STORAGE_DIR", str(tmp_path / "storage"))
+    # The app starts the report scheduler on startup; tests must never run it, since
+    # it would open sessions on the real database instead of the test one.
+    monkeypatch.setattr(settings, "AUTO_REPORTS_ENABLED", False)
 
     session_factory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 

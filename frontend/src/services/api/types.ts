@@ -30,6 +30,8 @@ export interface Token {
 export interface DashboardKpis {
   head_count: number;
   present_count: number;
+  /** 0-100, from unrounded totals. Null when there is no head count. */
+  present_percent?: number | string | null;
   late_login_count: number;
   early_logout_count: number;
   shift_adherence_count: number;

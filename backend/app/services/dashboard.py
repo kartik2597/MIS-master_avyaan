@@ -289,6 +289,14 @@ def get_dashboard_kpis(
     ).one()
 
     days_with_data = max(_int(shrinkage_totals[5]), 1)
+    head_total = _int(shrinkage_totals[0])
+    present_total = _int(shrinkage_totals[1])
+    # Use the raw totals, not the rounded per-day averages returned below.
+    present_percent = (
+        _percent(Decimal(present_total) * 100 / Decimal(head_total))
+        if head_total > 0
+        else None
+    )
     planned_shrinkage = _percent(shrinkage_totals[2])
     unplanned_shrinkage = _percent(shrinkage_totals[3])
 
@@ -307,6 +315,7 @@ def get_dashboard_kpis(
     return DashboardKpis(
         head_count=round(_int(shrinkage_totals[0]) / days_with_data),
         present_count=round(_int(shrinkage_totals[1]) / days_with_data),
+        present_percent=present_percent,
         late_login_count=_int(adherence_totals[0]),
         early_logout_count=_int(adherence_totals[1]),
         shift_adherence_count=_int(adherence_totals[2]),

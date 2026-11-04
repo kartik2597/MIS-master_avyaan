@@ -7,7 +7,9 @@ from app.api.routes import (
     health,
     hiring_dashboard,
     imports,
+    leadership_dashboard,
     project_dashboard,
+    reports,
     uploads,
 )
 
@@ -21,6 +23,10 @@ api_router.include_router(
 api_router.include_router(
     hiring_dashboard.router, prefix="/dashboard/hiring", tags=["dashboard"]
 )
+api_router.include_router(
+    leadership_dashboard.router, prefix="/dashboard/leadership", tags=["dashboard"]
+)
+api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 api_router.include_router(employees.router, prefix="/employees", tags=["employees"])
 api_router.include_router(imports.router, prefix="/imports", tags=["imports"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])
